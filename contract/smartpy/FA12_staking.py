@@ -3,6 +3,19 @@ import smartpy as sp
 
 class FA12Staking(sp.Contract):
     def __init__(self, contract, admin, reserve, **kargs):
+        
+        self.stake = sp.TRecord(approvals=sp.TMap(
+            timestamp = sp.TTimestamp,
+            rate = sp.TInt,
+            value = sp.TInt)
+        
+        self.userstakePack = sp.big_map(
+            tkey = sp.TAddress,
+            tvalue = sp.map(
+                tkey = sp.Tint,
+                tvalue = sp.Tlist(stake))
+            )
+                                   
         self.init(
             FA12TokenContract = contract,
             admin = admin, 
