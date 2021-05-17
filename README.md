@@ -1,0 +1,1 @@
+#SMAK staking
