@@ -1,7 +1,7 @@
 import smartpy as sp
 
 """---------------------------------------------------------------------"""
-# TODO On considère le staking lock comme 0 et le staking flex comme 1
+# TODO On considère le staking flex comme 0 et le staking lock comme 1
 """---------------------------------------------------------------------"""
 Stake = sp.TRecord(
     timestamp=sp.TTimestamp,
@@ -10,24 +10,24 @@ Stake = sp.TRecord(
 )
 
 UserStakePack = sp.big_map(
-    tkey = sp.TAddress,
-    tvalue = sp.TMap(
-       sp.TNat,
-       sp.TMap(
-           sp.TNat,
-           Stake)
+    tkey=sp.TAddress,
+    tvalue=sp.TMap(
+        sp.TNat,
+        sp.TMap(
+            sp.TNat,
+            Stake)
     )
 )
 
 Options = sp.big_map(
-    tkey = sp.TNat,
-    tvalue = sp.TMap(
+    tkey=sp.TNat,
+    tvalue=sp.TMap(
         sp.TNat,
         sp.TRecord(
-            minStake = sp.TNat,
-            maxStake = sp.TNat,
-            stakingPeriod = sp.TNat,
-            stakingPercentage = sp.TNat
+            minStake=sp.TNat,
+            maxStake=sp.TNat,
+            stakingPeriod=sp.TNat,
+            stakingPercentage=sp.TNat
         )
     )
 )
@@ -39,13 +39,12 @@ def call(c, x):
 
 class FA12Staking(sp.Contract):
     def __init__(self, contract, admin, reserve, **kargs):
-
         self.init(
             FA12TokenContract=contract,
             admin=admin,
             reserve=reserve,
-            userStakePack = UserStakePack,
-            stakingOptions = Options,
+            userStakePack=UserStakePack,
+            stakingOptions=Options,
             **kargs
         )
 
@@ -60,47 +59,60 @@ class FA12Staking(sp.Contract):
         sp.set_type(params, sp.TRecord(admin=sp.TAddress))
         sp.verify_equal(sp.sender, self.data.admin)
         self.data.admin = params.admin
-        
+
     @sp.entry_point
     def updateContract(self, params):
-        sp.set_type(params, sp.TRecord(contract = sp.TAddress))
+        sp.set_type(params, sp.TRecord(contract=sp.TAddress))
         sp.verify_equal(sp.sender, self.data.admin)
         self.data.FA12TokenContract = params.contract
 
     @sp.entry_point
     def unstakeLock(self, params):
         """pack=sp.TNat,"""
-        sp.set_type(params, sp.pair(sp.TNat, sp.TNat))
+        sp.set_type(params, sp.TPair(sp.TNat, sp.TNat))
         """ on vérifie que le sender a bien deja staké """
-        sp.verifiy(self.data.userstakePack.contains(sp.sender))
+        sp.verify(self.data.userStakePack.contains(sp.sender))
         """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
-        sp.verify(self.data.userstakePack[sp.sender].contains(params[0]))
+        sp.verify(self.data.userStakePack[sp.sender].contains(params[0]))
         """ on vérifie que le staking qu'il veut withdraw existe """
-        sp.verifiy(sp.len(self.data.userstakePack[sp.sender][params[0]]) < params[1])
-        amount = sp.TNat(0)
-        sp.if (self.data.userstakePack[sp.sender][params[1]].timestamp.sp.add_days(""" self.data.stakePack[params[0]].period""") > sp.now):
-            amount = self.getRewardLocked(self.data.userstakePack[sp.sender][params[0]][params[0]]) + \
-                     self.data.userstakePack[sp.sender][params[0]][params[1]].amount
+        sp.verify(sp.len(self.data.userStakePack[sp.sender][params[0]]) < params[1])
+        amount = sp.nat(0)
+        sp.if (self.data.userStakePack[sp.sender][params[0]][params[1]].timestamp.sp.add_days(self.data.Options[params[0]].stakingPeriod) > sp.now):
+            amount = self.getReward(self.data.userStakePack[sp.sender][params[0]][params[1]], self.data.userStakePack[sp.sender][params[0]][params[1]].timestamp.sp.add_days(
+                self.data.Options[params[0]].stakingPeriod)) + self.data.userStakePack[sp.sender][params[0]][params[1]].amount
 
-        paramTrans = sp.TRecord(from_=sp.TAddress, to_=sp.TAddress, amount=sp.TNat)
-        paramCall = sp.TRecord(from_=self.data.reserveAddress, to_=sp.sender, amount=amount)
-        call(sp.contract(paramTrans, entry_point="transfer").open_some(), paramCall)
+        paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
+        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, amount=amount)
+        call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
 
 
+    @sp.entry_point
+    def unstakeFlex(self, params):
+        sp.set_type(params, sp.TNat)
+        """ on vérifie que le sender a bien deja staké """
+        sp.verify(self.data.userStakePack.contains(sp.sender))
+        """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
+        sp.verify(self.data.userStakePack[sp.sender][0].contains(params))
+
+        paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
+        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, amount=self.getReward(self.data.userStakePack[sp.sender][0][params], sp.now))
+        call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
     """@sp.entry_point
-    def unstakeAll(self):
+    def unstakeAll(self):self.data.userstakePack[sp.sender][0]
         sp.verifiy(self.data.userstakePack.contains(sp.sender))
         sp.for i in sp.range(self.data.numPacks):
             sp.for j in sp.range(sp.len(self.data.userstakePack[sp.sender][i])):
                 self.unstake(i, j, self.data.userstakePack[sp.sender][i][j].value)
     """
-    
-    def getRewardLocked(self, stake, end):
-        k = sp.TNat(10000)
-        timeRatio = (k * sp.TImestamp(1).add_seconds(end)) / sp.TImestamp(1).add_days(365)
-        reward = timeRatio * stake.rate
+
+    def getReward(self, stake, end):
+        k = sp.nat(10000)
+        period = end - stake.timestamp
+        timeRatio = (k * sp.as_nat(period) / sp.as_nat(sp.timestamp(1).add_days(365) - sp.timestamp(0)))
+        reward = timeRatio * sp.as_nat(stake.rate)
         reward /= k
         return reward
+
 
 @sp.add_test(name="Minimal")
 def test():
