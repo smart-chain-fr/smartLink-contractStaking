@@ -9,29 +9,43 @@ Stake = sp.TRecord(
     value=sp.TInt
 )
 
+UserStakePack = sp.big_map(
+    tkey = sp.TAddress,
+    tvalue = sp.TMap(
+       sp.TNat,
+       sp.TMap(
+           sp.TNat,
+           Stake)
+    )
+)
+
+Options = sp.big_map(
+    tkey = sp.TNat,
+    tvalue = sp.TMap(
+        sp.TNat,
+        sp.TRecord(
+            minStake = sp.TNat,
+            maxStake = sp.TNat,
+            stakingPeriod = sp.TNat,
+            stakingPercentage = sp.TNat
+        )
+    )
+)
+
 
 def call(c, x):
     sp.transfer(x, sp.mutez(0), c)
 
 
 class FA12Staking(sp.Contract):
-    def __init__(self, contract, admin, reserve, address, **kargs):
-        # je pense que le "approvals = sp.TMap" est inutile ici, cf, voir plus haut!
-        self.reserveAddress = sp.TAddress
-        self.userstakePack = sp.big_map(
-            tkey=sp.TAddress,
-            tvalue=sp.map(
-                tkey=sp.Tint,
-                tvalue=sp.TSet(Stake))
-        )
+    def __init__(self, contract, admin, reserve, **kargs):
+
         self.init(
             FA12TokenContract=contract,
             admin=admin,
             reserve=reserve,
-            minStake=minstake,
-            maxStake=maxstake,
-            stakingPeriod=period,
-            stakingPercentage=percentage,
+            userStakePack = UserStakePack,
+            stakingOptions = Options,
             **kargs
         )
 
@@ -46,30 +60,12 @@ class FA12Staking(sp.Contract):
         sp.set_type(params, sp.TRecord(admin=sp.TAddress))
         sp.verify_equal(sp.sender, self.data.admin)
         self.data.admin = params.admin
-
+        
     @sp.entry_point
-    def updateMinStake(self, params):
-        sp.set_type(params, sp.TRecord(minstake=sp.TNat))
+    def updateContract(self, params):
+        sp.set_type(params, sp.TRecord(contract = sp.TAddress))
         sp.verify_equal(sp.sender, self.data.admin)
-        self.data.minStake = params.minstake
-
-    @sp.entry_point
-    def updateMaxStake(self, params):
-        sp.set_type(params, sp.TRecord(maxstake=sp.TNat))
-        sp.verify_equal(sp.sender, self.data.admin)
-        self.data.maxStake = params.maxstake
-
-    @sp.entry_point
-    def updatePercentage(self, params):
-        sp.set_type(params, sp.TRecord(percentage=sp.TNat))
-        sp.verify_equal(sp.sender, self.data.admin)
-        self.data.stakingPercentage = params.percentage
-
-    @sp.entry_point
-    def updatePeriod(self, params):
-        sp.set_type(params, sp.TRecord(period=sp.TNat))
-        sp.verify_equal(sp.sender, self.data.admin)
-        self.data.stakingPeriod = params.period
+        self.data.FA12TokenContract = params.contract
 
     @sp.entry_point
     def unstakeLock(self, params):
@@ -91,27 +87,20 @@ class FA12Staking(sp.Contract):
         call(sp.contract(paramTrans, entry_point="transfer").open_some(), paramCall)
 
 
-"""@sp.entry_point
-def unstakeAll(self):
-    sp.verifiy(self.data.userstakePack.contains(sp.sender))
-    sp.for i in sp.range(self.data.numPacks):
-        sp.for j in sp.range(sp.len(self.data.userstakePack[sp.sender][i])):
-            self.unstake(i, j, self.data.userstakePack[sp.sender][i][j].value)
-"""
-
-def getRewardLocked(self, stake, end):
-    k = sp.TNat(10000)
-    timeRatio = (k * sp.TImestamp(1).add_seconds(end)) / sp.TImestamp(1).add_days(365)
-    reward = timeRatio * stake.rate
-    reward /= k
-    return reward
-
-
-@sp.entry_point
-def setReserveAddres(self, params):
-    sp.set_type(params, sp.TAddress)
-    self.data.reserveAddress = params
-
+    """@sp.entry_point
+    def unstakeAll(self):
+        sp.verifiy(self.data.userstakePack.contains(sp.sender))
+        sp.for i in sp.range(self.data.numPacks):
+            sp.for j in sp.range(sp.len(self.data.userstakePack[sp.sender][i])):
+                self.unstake(i, j, self.data.userstakePack[sp.sender][i][j].value)
+    """
+    
+    def getRewardLocked(self, stake, end):
+        k = sp.TNat(10000)
+        timeRatio = (k * sp.TImestamp(1).add_seconds(end)) / sp.TImestamp(1).add_days(365)
+        reward = timeRatio * stake.rate
+        reward /= k
+        return reward
 
 @sp.add_test(name="Minimal")
 def test():
@@ -131,7 +120,7 @@ def test():
 
     scenario.h1("Initialize the contract")
     contract = sp.address("KT11...")
-    c1 = FA12Staking(contract, admin.address, reserve.address, sp.nat(0), sp.nat(10000), sp.nat(90), sp.nat(5))
+    c1 = FA12Staking(contract, admin.address, reserve.address)
     scenario += c1
 
     scenario.h1("Tests")
@@ -166,4 +155,3 @@ def test():
     scenario.h2("Updating staking period")
     scenario.h3("Alice tries to update the state variable but does not succeed")
     scenario.h3("Admin updates the state variable")
-
