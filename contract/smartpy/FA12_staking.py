@@ -1,47 +1,45 @@
 import smartpy as sp
 
-"""---------------------------------------------------------------------"""
-# TODO On considère le staking lock comme 0 et le staking flex comme 1
-"""---------------------------------------------------------------------"""
 Stake = sp.TRecord(
     timestamp=sp.TTimestamp,
-    rate=sp.TInt,
-    value=sp.TInt
+    rate=sp.TNat,
+    value=sp.TNat
 )
 
 UserStakePack = sp.big_map(
-    tkey = sp.TAddress,
-    tvalue = sp.TMap(
-       sp.TNat,
-       sp.TMap(
-           sp.TNat,
-           Stake)
+    tkey=sp.TAddress,
+    tvalue=sp.TMap(
+        sp.TNat,
+        sp.TMap(
+            sp.TNat,
+            Stake)
     )
 )
 
 Options = sp.big_map(
-    tkey = sp.TNat,
-    tvalue = sp.TRecord(
-        minStake = sp.TNat,
-        maxStake = sp.TNat,
-        stakingPeriod = sp.TNat,
-        stakingPercentage = sp.TNat
+    tkey=sp.TNat,
+    tvalue= sp.TRecord(
+            minStake=sp.TNat,
+            maxStake=sp.TNat,
+            stakingPeriod=sp.TInt,
+            stakingPercentage=sp.TNat
+        )
     )
-)
-    
+
+
+
 def call(c, x):
     sp.transfer(x, sp.mutez(0), c)
 
 
 class FA12Staking(sp.Contract):
     def __init__(self, contract, admin, reserve, **kargs):
-
         self.init(
             FA12TokenContract=contract,
             admin=admin,
             reserve=reserve,
-            userStakePack = UserStakePack,
-            stakingOptions = Options,
+            userStakePack=UserStakePack,
+            stakingOptions=Options,
             votingContract = sp.none,
             **kargs
         )
@@ -80,7 +78,7 @@ class FA12Staking(sp.Contract):
 
     @sp.entry_point
     def createStakingOption(self, params):
-        sp.set_type(params, sp.TRecord(_id = sp.TNat, rate = sp.TNat, _max = sp.TNat, _min = sp.TNat, duration = sp.TNat).layout(("_id as id", ("rate", ("_max as max", ("_min as min", "duration"))))))
+        sp.set_type(params, sp.TRecord(_id = sp.TNat, rate = sp.TNat, _max = sp.TNat, _min = sp.TNat, duration = sp.TInt).layout(("_id as id", ("rate", ("_max as max", ("_min as min", "duration"))))))
         sp.verify(~self.data.stakingOptions.contains(params._id), "A staking option with this Id already exists")
         sp.verify(self.is_voting_contract(sp.sender) | (self.data.admin == sp.sender), "Access denied")
         option = sp.record(
@@ -101,7 +99,7 @@ class FA12Staking(sp.Contract):
 
     @sp.entry_point
     def updateStakingOptionDuration(self, params):
-        sp.set_type(params, sp.TRecord(_id = sp.TNat, duration = sp.TNat).layout(("_id as id", "duration")))
+        sp.set_type(params, sp.TRecord(_id = sp.TNat, duration = sp.TInt).layout(("_id as id", "duration")))
         sp.verify(self.is_voting_contract(sp.sender) | (self.data.admin == sp.sender), "Access denied")
         sp.verify(self.data.stakingOptions.contains(params._id), "The staking option for this id does not exist")
         self.data.stakingOptions[params._id].stakingPeriod = params.duration
@@ -122,39 +120,51 @@ class FA12Staking(sp.Contract):
         
 
     @sp.entry_point
-    def updateVotingContract(self, params):
-        sp.set_type(params, sp.TRecord(contract = sp.TAddress))
-        sp.verify_equal(sp.sender, self.data.admin)
-        self.data.votingContract = sp.some(params.contract)
-        
-    def is_voting_contract(self, contract):
-        #sp.trace(self.data.votingContract.is_some())
-        a = sp.bool(False)
-        sp.if -self.data.votingContract.is_some():
-            return "plop"
-        sp.else:
-            return "blblb"
-            
-    
-    def t(self):
-        if False:
-            return "op"
-        else:
-            return "ko"
+    def unstakeLock(self, params):
+        """pack=sp.TNat,"""
+        sp.set_type(params, sp.TRecord(pack=sp.TNat, index=sp.TNat))
+        """ on vérifie que le sender a bien deja staké """
+        sp.verify(self.data.userStakePack.contains(sp.sender))
+        """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
+        sp.verify(self.data.userStakePack[sp.sender].contains(params.pack))
+        """ on vérifie que le staking qu'il veut withdraw existe """
+        sp.verify(sp.len(self.data.userStakePack[sp.sender][params.pack]) < params.index)
+        amount = sp.nat(0)
+        sp.if (self.data.userStakePack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.index].stakingPeriod) > sp.now):
+            amount = self.getReward(self.data.userStakePack[sp.sender][params.pack][params.index], self.data.userStakePack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod)) + self.data.userStakePack[sp.sender][params.pack][params.index].value
+
+        paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
+        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
+        call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
+
+
     @sp.entry_point
-    def updateOptionPackPercentage(self, params):
-        sp.set_type(params, sp.TRecord(_id = sp.TNat, percentage = sp.TNat))
-        #sp.verify(self.is_voting_contract(sp.sender))
-        #sp.trace(self.is_voting_contract(sp.sender))
-        period = sp.now.add_days(90)-sp.timestamp(0)
-        period2 = sp.timestamp(0).add_days(365)-sp.timestamp(0)
-        timeRatio =sp.nat(100000)*sp.as_nat(period) /sp.as_nat(period2)
-        sp.trace(timeRatio)
-        
-        #sp.trace(self.t())
-        #sp.verify(sp.sender == self.data.votingContract.open_some())
-        
-    
+    def unstakeFlex(self, params):
+        sp.set_type(params, sp.TNat)
+        """ on vérifie que le sender a bien deja staké """
+        sp.verify(self.data.userStakePack.contains(sp.sender))
+        """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
+        sp.verify(self.data.userStakePack[sp.sender][0].contains(params))
+
+        paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
+        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.getReward(self.data.userStakePack[sp.sender][0][params], sp.now))
+        call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
+    """@sp.entry_point
+    def unstakeAll(self):self.data.userstakePack[sp.sender][0]
+        sp.verifiy(self.data.userstakePack.contains(sp.sender))
+        sp.for i in sp.range(self.data.numPacks):
+            sp.for j in sp.range(sp.len(self.data.userstakePack[sp.sender][i])):
+                self.unstake(i, j, self.data.userstakePack[sp.sender][i][j].value)
+    """
+
+    def getReward(self, stake, end):
+        k = sp.nat(10000)
+        period = end - stake.timestamp
+        timeRatio = (k * sp.as_nat(period) / sp.as_nat(sp.timestamp(1).add_days(365) - sp.timestamp(0)))
+        reward = timeRatio * stake.rate
+        reward /= k
+        return reward
+
 
 @sp.add_test(name="Minimal")
 def test():
