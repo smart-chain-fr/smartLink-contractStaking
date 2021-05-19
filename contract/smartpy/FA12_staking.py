@@ -18,14 +18,12 @@ class FA12Staking(sp.Contract):
     def __init__(self, contract, admin, reserve, address, **kargs):
         # je pense que le "approvals = sp.TMap" est inutile ici, cf, voir plus haut!
         self.reserveAddress = sp.TAddress
-        self.numPack = sp.TNat(2)
         self.userstakePack = sp.big_map(
             tkey=sp.TAddress,
             tvalue=sp.map(
                 tkey=sp.Tint,
                 tvalue=sp.TSet(Stake))
         )
-        self.contractAddress = sp.TAddress(address)
         self.init(
             FA12TokenContract=contract,
             admin=admin,
@@ -80,13 +78,13 @@ class FA12Staking(sp.Contract):
         """ on vérifie que le sender a bien deja staké """
         sp.verifiy(self.data.userstakePack.contains(sp.sender))
         """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
-        sp.verify(self.data.userstakePack[sp.sender].contains(params.pack))
+        sp.verify(self.data.userstakePack[sp.sender].contains(params[0]))
         """ on vérifie que le staking qu'il veut withdraw existe """
-        sp.verifiy(sp.len(self.data.userstakePack[sp.sender][params.pack]) < params.index)
+        sp.verifiy(sp.len(self.data.userstakePack[sp.sender][params[0]]) < params[1])
         amount = sp.TNat(0)
-        sp.if (self.data.userstakePack[sp.sender][params.index].timestamp.sp.add_days(90) > sp.now):
-            amount = self.getRewardLocked(self.data.userstakePack[sp.sender][params.pack][params.index]) + \
-                     self.data.userstakePack[sp.sender][params.pack][params.index].amount
+        sp.if (self.data.userstakePack[sp.sender][params[1]].timestamp.sp.add_days(""" self.data.stakePack[params[0]].period""") > sp.now):
+            amount = self.getRewardLocked(self.data.userstakePack[sp.sender][params[0]][params[0]]) + \
+                     self.data.userstakePack[sp.sender][params[0]][params[1]].amount
 
         paramTrans = sp.TRecord(from_=sp.TAddress, to_=sp.TAddress, amount=sp.TNat)
         paramCall = sp.TRecord(from_=self.data.reserveAddress, to_=sp.sender, amount=amount)
