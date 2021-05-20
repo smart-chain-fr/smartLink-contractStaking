@@ -276,7 +276,7 @@ def test():
     scenario.h3("Alice tries to stake Lock and succeeds")
     scenario += c1.stake(pack = 1, amount = 100000).run(sender=alice)
     
-    #scenario.h2("Unstaking")
+    scenario.h2("Unstaking")
     scenario.h3("Alice tries to unstake and succeeds")
     scenario += c1.unstakeFlex(0).run(sender=alice)
     scenario.h3("Alice tries to unstake a pack she didn't stake and fails")
