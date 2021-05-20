@@ -136,6 +136,8 @@ class FA12Staking(sp.Contract):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
+        self.data.userStakePack[sp.sender][params.pack][params.index] = self.data.userStakePack[sp.sender][params.pack][sp.as_nat(sp.len(self.data.userStakePack[sp.sender][params.pack])-1)]
+        del self.data.userStakePack[sp.sender][params.pack][sp.as_nat(sp.len(self.data.userStakePack[sp.sender][params.pack])-1)]
 
 
     @sp.entry_point
