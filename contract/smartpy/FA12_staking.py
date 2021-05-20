@@ -1,6 +1,6 @@
 import smartpy as sp
 class Error:
-    def make(s): return ("Staking " + s)
+    def make(s): return (s)
 
     NotAdmin                        = make("Access denied")
     AmountTooHigh                   = make("Amount is too high")
@@ -133,7 +133,7 @@ class FA12Staking(sp.Contract):
         self.data.userStakePack[addr] = sp.map({pack:sp.map({0:staking})})
     
     def addStaking(self, addr, pack, staking):
-        self.data.userStakePack[addr][pack][sp.as_nat(sp.len(self.data.userStakePack[addr][pack])-1)]= staking
+        self.data.userStakePack[addr][pack][sp.len(self.data.userStakePack[addr][pack])]= staking
     
     def addStakingPack(self, addr, pack, staking):
         self.data.userStakePack[addr][pack]= sp.map({0:staking})
@@ -171,8 +171,8 @@ class FA12Staking(sp.Contract):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
-        self.data.userStakePack[sp.sender][params.pack][params.index] = self.data.userStakePack[sp.sender][params.pack][sp.as_nat(sp.len(self.data.userStakePack[sp.sender][params.pack])-1)]
-        del self.data.userStakePack[sp.sender][params.pack][sp.as_nat(sp.len(self.data.userStakePack[sp.sender][params.pack])-1)]
+        
+        del self.data.userStakePack[sp.sender][params.pack][params.index]
 
 
     @sp.entry_point
@@ -186,8 +186,7 @@ class FA12Staking(sp.Contract):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.getReward(self.data.userStakePack[sp.sender][0][params], sp.now))
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
-        """self.data.userStakePack[sp.sender][0][params] = self.data.userStakePack[sp.sender][0][sp.as_nat(sp.len(self.data.userStakePack[sp.sender][0])-1)]
-        del self.data.userStakePack[sp.sender][0][sp.as_nat(sp.len(self.data.userStakePack[sp.sender][0])-1)]"""
+        sp.trace(self.data.userStakePack)
         del self.data.userStakePack[sp.sender][0][params]
 
     def getReward(self, stake, end):
@@ -270,7 +269,7 @@ def test():
 
     scenario.h2("Staking")
     scenario.h3("Alice tries to stake flex and succeeds")
-    scenario += c1.stake(pack=0, amount = 100).run(sender=alice)
+    scenario += c1.stake(pack=0, amount = 10000).run(sender=alice)
     scenario.h3("Alice tries to stake on the same pack")
     scenario += c1.stake(pack=0, amount = 100000).run(sender=alice)
     scenario.h3("Alice tries to stake Lock and succeeds")
@@ -279,7 +278,12 @@ def test():
     scenario.h2("Unstaking")
     scenario.h3("Alice tries to unstake and succeeds")
     scenario += c1.unstakeFlex(0).run(sender=alice)
-    scenario.h3("Alice tries to unstake a pack she didn't stake and fails")
-    scenario += c1.unstakeFlex(1).run(sender=alice, valid = False)
+    scenario.h3("Alice tries to unstake a staking she didn't make and fails")
+    scenario += c1.unstakeFlex(2).run(sender=alice, valid = False)
+    scenario.h3("Alice tries to unstake and succeeds")
+    scenario += c1.unstakeFlex(1).run(sender=alice)
     scenario.h3("Alice tries to unstake a lock pack and succeeds")
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender= alice)
+    scenario.h3("Alice tries to unstake a pack she didn't use and fails")
+    scenario += c1.unstakeLock(pack=2, index=3).run(sender=alice, valid = False)
+   
