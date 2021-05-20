@@ -151,13 +151,8 @@ class FA12Staking(sp.Contract):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.getReward(self.data.userStakePack[sp.sender][0][params], sp.now))
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
-    """@sp.entry_point
-    def unstakeAll(self):self.data.userstakePack[sp.sender][0]
-        sp.verifiy(self.data.userstakePack.contains(sp.sender))
-        sp.for i in sp.range(self.data.numPacks):
-            sp.for j in sp.range(sp.len(self.data.userstakePack[sp.sender][i])):
-                self.unstake(i, j, self.data.userstakePack[sp.sender][i][j].value)
-    """
+        self.data.userStakePack[sp.sender][params.pack][params.index] = self.data.userStakePack[sp.sender][params.pack][sp.as_nat(sp.len(self.data.userStakePack[sp.sender][params.pack])-1)]
+        del self.data.userStakePack[sp.sender][params.pack][sp.as_nat(sp.len(self.data.userStakePack[sp.sender][params.pack])-1)]
 
     def getReward(self, stake, end):
         k = sp.nat(10000)
