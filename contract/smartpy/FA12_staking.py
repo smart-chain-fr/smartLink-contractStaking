@@ -128,7 +128,7 @@ class FA12Staking(sp.Contract):
         """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
         sp.verify(self.data.userStakePack[sp.sender].contains(params.pack))
         """ on vérifie que le staking qu'il veut withdraw existe """
-        sp.verify(sp.len(self.data.userStakePack[sp.sender][params.pack]) < params.index)
+        sp.verify(sp.len(self.data.userStakePack[sp.sender][params.pack]) > params.index)
         amount = sp.nat(0)
         sp.if (self.data.userStakePack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.index].stakingPeriod) > sp.now):
             amount = self.getReward(self.data.userStakePack[sp.sender][params.pack][params.index], self.data.userStakePack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod)) + self.data.userStakePack[sp.sender][params.pack][params.index].value
