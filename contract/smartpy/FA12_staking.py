@@ -12,21 +12,32 @@ class Error:
     NotStaking                      = make("This stake doesn't exist")
 
 
-Stake = sp.TRecord(
+StakeLock = sp.TRecord(
     timestamp=sp.TTimestamp,
     rate=sp.TNat,
     value=sp.TNat
 )
 
-UserStakePack = sp.big_map(
+StakeFlex = sp.TRecord(
+    timestamp=sp.TTimestamp,
+    rate=sp.TNat,
+    value=sp.TNat,
+    reward=sp.TNat
+)
+
+UserStakeFlexPack = sp.big_map(tkey=sp.TAddress, tvalue = StakeFlex)
+
+UserStakeLockPack = sp.big_map(
     tkey=sp.TAddress,
     tvalue=sp.TMap(
         sp.TNat,
         sp.TMap(
             sp.TNat,
-            Stake)
+            StakeLock)
     )
 )
+
+TotalReward = sp.big_map(tkey = sp.TAddress, tvalue = sp.TNat)
 
 Options = sp.big_map(
     tkey=sp.TNat,
@@ -50,7 +61,9 @@ class FA12Staking(sp.Contract):
             FA12TokenContract=contract,
             admin=admin,
             reserve=reserve,
-            userStakePack=UserStakePack,
+            userStakeLockPack=UserStakeLockPack,
+            userStakeFlexPack=UserStakeFlexPack,
+            totalReward = TotalReward
             stakingOptions=Options,
             votingContract = sp.none,
             **kargs
@@ -130,13 +143,13 @@ class FA12Staking(sp.Contract):
         self.data.stakingOptions[params._id].minStake = params._min
     
     def initUserStaking(self, addr, pack, staking):
-        self.data.userStakePack[addr] = sp.map({pack:sp.map({0:staking})})
+        self.data.userStakeLockPack[addr] = sp.map({pack:sp.map({0:staking})})
     
     def addStaking(self, addr, pack, staking):
-        self.data.userStakePack[addr][pack][sp.len(self.data.userStakePack[addr][pack])]= staking
+        self.data.userStakeLockPack[addr][pack][sp.len(self.data.userStakeLockPack[addr][pack])]= staking
     
     def addStakingPack(self, addr, pack, staking):
-        self.data.userStakePack[addr][pack]= sp.map({0:staking})
+        self.data.userStakeLockPack[addr][pack]= sp.map({0:staking})
     
     @sp.entry_point
     def stake(self, params):
@@ -144,10 +157,10 @@ class FA12Staking(sp.Contract):
         sp.verify(params.amount > self.data.stakingOptions[params.pack].minStake, Error.AmountTooLow)
         sp.verify(params.amount < self.data.stakingOptions[params.pack].maxStake, Error.AmountTooHigh)
         staking = sp.record(timestamp=sp.now, rate = self.data.stakingOptions[params.pack].stakingPercentage, value = params.amount)
-        sp.if ~self.data.userStakePack.contains(sp.sender):
+        sp.if ~self.data.userStakeLockPack.contains(sp.sender):
             self.initUserStaking(sp.sender, params.pack, staking)
         sp.else:
-            sp.if ~self.data.userStakePack[sp.sender].contains(params.pack):
+            sp.if ~self.data.userStakeLockPack[sp.sender].contains(params.pack):
                 self.addStakingPack(sp.sender, params.pack, staking)
             sp.else:
                 self.addStaking(sp.sender, params.pack, staking)
@@ -157,32 +170,32 @@ class FA12Staking(sp.Contract):
     def unstakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack=sp.TNat, index=sp.TNat))
         """ on vérifie que le sender a bien deja staké """
-        sp.verify(self.data.userStakePack.contains(sp.sender), Error.NeverStaked)
+        sp.verify(self.data.userStakeLockPack.contains(sp.sender), Error.NeverStaked)
         """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
-        sp.verify(self.data.userStakePack[sp.sender].contains(params.pack), Error.NeverUsedPack)
+        sp.verify(self.data.userStakeLockPack[sp.sender].contains(params.pack), Error.NeverUsedPack)
         """ on vérifie que le staking qu'il veut withdraw existe """
-        sp.verify(sp.len(self.data.userStakePack[sp.sender][params.pack]) > params.index, Error.NotStaking)
+        sp.verify(sp.len(self.data.userStakeLockPack[sp.sender][params.pack]) > params.index, Error.NotStaking)
         amount = sp.nat(0)
-        sp.if (self.data.userStakePack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now):
-            amount = self.getReward(self.data.userStakePack[sp.sender][params.pack][params.index], self.data.userStakePack[sp.sender][params.pack][params.index].timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod)) + self.data.userStakePack[sp.sender][params.pack][params.index].value
+        sp.if (self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now):
+            amount = self.getReward(self.data.userStakeLockPack[sp.sender][params.pack][params.index], self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod)) + self.data.userStakeLockPack[sp.sender][params.pack][params.index].value
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
-        del self.data.userStakePack[sp.sender][params.pack][params.index]
+        del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
 
 
     @sp.entry_point
     def unstakeFlex(self, params):
         sp.set_type(params, sp.TNat)
         """ on vérifie que le sender a bien deja staké """
-        sp.verify(self.data.userStakePack.contains(sp.sender), Error.NeverStaked)
+        sp.verify(self.data.userStakeLockPack.contains(sp.sender), Error.NeverStaked)
         """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
-        sp.verify(self.data.userStakePack[sp.sender][0].contains(params), Error.NeverUsedPack)
+        sp.verify(self.data.userStakeLockPack[sp.sender][0].contains(params), Error.NeverUsedPack)
 
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
-        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.getReward(self.data.userStakePack[sp.sender][0][params], sp.now))
+        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.getReward(self.data.userStakeLockPack[sp.sender][0][params], sp.now))
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
-        del self.data.userStakePack[sp.sender][0][params]
+        del self.data.userStakeLockPack[sp.sender][0][params]
 
     def getReward(self, stake, end):
         k = sp.nat(10000000000)
