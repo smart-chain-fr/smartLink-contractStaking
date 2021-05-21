@@ -288,5 +288,8 @@ def test():
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender= alice)
     scenario.h3("Alice tries to unstake a pack she didn't use and fails")
     scenario += c1.unstakeLock(pack=2, index=3).run(sender=alice, valid = False)
+    scenario.h3("Alice tries to unstake a stake she didn't use and fails")
+    scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)
+    
     
    
