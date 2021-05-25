@@ -149,6 +149,7 @@ class FA12Staking(sp.Contract):
         self.data.userStakeLockPack[addr][pack][sp.len(self.data.userStakeLockPack[addr][pack])]= staking
     
     def addStakingPack(self, addr, pack, staking):
+        sp.set_type(staking, StakeLock)
         self.data.userStakeLockPack[addr][pack]= sp.map({0:staking})
     
     @sp.entry_point
