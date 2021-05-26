@@ -147,25 +147,17 @@ class FA12Staking(sp.Contract):
         self.data.userStakeLockPack[addr] = sp.map({pack:sp.map(l= {sp.nat(0):staking})})
 
 
-
-
         # cette ligne marche po
     def addStaking(self, addr, pack, staking):
         sp.set_type(staking, StakeLock)
-        temp = {}
-        counter= 0
-        sp.for x in sp.range(0, sp.len(self.data.userStakeLockPack[addr][pack]),1):
-            stakingTemp = self.data.userStakeLockPack[addr][pack][counter]
-            temp[counter] = staking
-            counter +=1
-        temp[counter+1]= staking
-        self.data.userStakeLockPack[addr] = sp.map({pack:sp.map(l= temp)})
+        index = sp.len(self.data.userStakeLockPack[addr][pack])
+        self.data.userStakeLockPack[addr][pack][index] = staking
         
     
     def addStakingPack(self, addr, pack, staking):
         # cette ligne a été débuggée
         sp.set_type(staking, StakeLock)
-        self.data.userStakeLockPack[addr][pack]= sp.map({sp.nat(0):staking})
+        self.data.userStakeLockPack[addr][pack] = sp.map({sp.nat(0):staking})
     
     @sp.entry_point
     def stakeLock(self, params):
