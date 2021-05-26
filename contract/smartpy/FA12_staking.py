@@ -233,20 +233,21 @@ class FA12Staking(sp.Contract):
     def claimRewardFlex(self):
         """ on vérifie que le sender a bien deja staké """
         sp.verify(self.data.userStakeFlexPack.contains(sp.sender), Error.NeverStaked)
-        """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
         staking= self.data.userStakeFlexPack[sp.sender] 
         self.data.userStakeFlexPack[sp.sender].reward += self.getReward(staking.timestamp, sp.now.add_seconds(0), staking.value, self.data.stakingOptions[0].stakingPercentage)
+        sp.trace(self.data.userStakeFlexPack[sp.sender].reward)
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
         self.data.userStakeFlexPack[sp.sender].reward = sp.as_nat(0) 
-        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
+        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(1)
         sp.trace(self.data.userStakeFlexPack)
 
     def getReward(self, start, end, value, rate):
         k = sp.nat(10000000000)
         period = end - start
-        timeRatio = k * sp.as_nat(period) / sp.as_nat(sp.timestamp(1).add_days(365) - sp.timestamp(1))
+        sp.trace(period)
+        timeRatio = k * sp.as_nat(period) / sp.as_nat(sp.timestamp(0).add_days(365) - sp.timestamp(0))
         reward = timeRatio * rate
         reward *= value
         reward /= k*100
@@ -348,3 +349,13 @@ def test():
     scenario += c1.unstakeLock(pack=2, index=3).run(sender=alice, valid = False)
     scenario.h3("Alice tries to unstake a stake she didn't use and fails")
     scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)
+
+
+
+    scenario.h2("Alice tries to redeem rewards")
+    scenario.h3("Alice stakes flex and succeeds")
+    scenario+= c1.stakeFlex(amount = 10000).run(sender=alice, now=sp.timestamp(31536000))
+    scenario.h3("Alice tries to redeem rewards and succeds")
+    scenario += c1.claimRewardFlex().run(sender=alice, now = sp.timestamp(31536000*2))
+    scenario.h3("Bob tries to claim his rewards without staking")
+    scenario += c1.claimRewardFlex().run(sender=bob, valid = False)
