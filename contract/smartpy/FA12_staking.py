@@ -10,7 +10,6 @@ class Error:
     NeverStaked                     = make("Never staked on this contract")
     NeverUsedPack                   = make("Never staked using this pack")
     NotStaking                      = make("This stake doesn't exist")
-    NotEnoughBalance                = make("Not enough tokens to unstake")
 
 
 StakeLock = sp.TRecord(
@@ -143,61 +142,77 @@ class FA12Staking(sp.Contract):
         self.data.stakingOptions[params._id].minStake = params._min
     
     def initUserStaking(self, addr, pack, staking):
-        self.data.userStakeLockPack[addr] = sp.map({pack:sp.map({0:staking})})
-    
+        # cette ligne a été débuguée
+        sp.set_type(staking, StakeLock)
+        self.data.userStakeLockPack[addr] = sp.map({pack:sp.map(l= {sp.nat(0):staking})})
+
+
+
+
+        # cette ligne marche po
     def addStaking(self, addr, pack, staking):
-        self.data.userStakeLockPack[addr][pack][sp.len(self.data.userStakeLockPack[addr][pack])]= staking
+        sp.set_type(staking, StakeLock)
+        temp = {}
+        counter= 0
+        sp.for x in sp.range(0, sp.len(self.data.userStakeLockPack[addr][pack]),1):
+            stakingTemp = self.data.userStakeLockPack[addr][pack][counter]
+            temp[counter] = staking
+            counter +=1
+        temp[counter+1]= staking
+        self.data.userStakeLockPack[addr] = sp.map({pack:sp.map(l= temp)})
+        
     
     def addStakingPack(self, addr, pack, staking):
+        # cette ligne a été débuggée
         sp.set_type(staking, StakeLock)
-        self.data.userStakeLockPack[addr][pack]= sp.map({0:staking})
+        self.data.userStakeLockPack[addr][pack]= sp.map({sp.nat(0):staking})
     
     @sp.entry_point
     def stakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, amount = sp.TNat))
         sp.verify(params.amount > self.data.stakingOptions[params.pack].minStake, Error.AmountTooLow)
         sp.verify(params.amount < self.data.stakingOptions[params.pack].maxStake, Error.AmountTooHigh)
-        sp.verify(self.data.stakingOptions.contains(params.pack), Error.NotStakingOpt)
-        staking = sp.record(timestamp=sp.now, rate = self.data.stakingOptions[params.pack].stakingPercentage, value = params.amount)
+        staking = sp.record(timestamp=sp.now.add_seconds(1), rate = self.data.stakingOptions[params.pack].stakingPercentage, value = params.amount)
         sp.if ~self.data.userStakeLockPack.contains(sp.sender):
             self.initUserStaking(sp.sender, params.pack, staking)
         sp.else:
             sp.if ~self.data.userStakeLockPack[sp.sender].contains(params.pack):
                 self.addStakingPack(sp.sender, params.pack, staking)
+            # Cette ligne marche po
             sp.else:
-                self.addStaking(sp.sender, params.pack, staking)
+                index = sp.len(self.data.userStakeLockPack[sp.sender][params.pack])
+                self.addStaking(sp.sender, params.pack,  staking)
 
-
-    def initStakingFlex(self, addr, amount):
-        self.data.userStakeFlexPack[addr] = sp.record(timestamp = sp.now, value = amount, reward = 0)
 
     def updateStakingFlex(self, addr, amount):
-        self.data.userStakeFlexPack[addr].reward = self.getReward(self.data.userStakeFlexPack[addr].timestamp, sp.now, self.data.userStakeFlexPack[addr].value, self.data.stakingOptions[0].stakingPercentage)
+        #self.data.userStakeFlexPack[addr].reward = self.getReward(self.data.userStakeFlexPack[addr].timestamp, sp.now, self.data.userStakeFlexPack[addr].value, self.data.stakingOptions[0].stakingPercentage)
         self.data.userStakeFlexPack[addr].value += amount
-        self.data.userStakeFlexPack[addr].timestamp = sp.now
+        self.data.userStakeFlexPack[addr].timestamp = sp.now.add_seconds(1)
         
     @sp.entry_point
     def stakeFlex(self, params):
-        sp.set_type(params, sp.TNat)
-        sp.verify(params > self.data.stakingOptions[0].minStake, Error.AmountTooLow)
-        sp.verify(params < self.data.stakingOptions[0].maxStake, Error.AmountTooHigh)
+        sp.set_type(params, sp.TRecord(amount = sp.TNat))
+        sp.verify(params.amount > self.data.stakingOptions[0].minStake, Error.AmountTooLow)
+        sp.verify(params.amount < self.data.stakingOptions[0].maxStake, Error.AmountTooHigh)
+        
+        # Cette ligne marche po
         sp.if ~self.data.userStakeFlexPack.contains(sp.sender):
-            self.initStakingFlex(sp.sender, params)
+            self.data.userStakeFlexPack[sp.sender] = sp.record(timestamp = sp.now.add_seconds(1), value = params.amount + sp.nat(0), reward = sp.nat(0))
+
         sp.else:
-            self.updateStakingFlex(sp.sender, params)
-        sp.trace(self.data.userStakeFlexPack)
+            self.updateStakingFlex(sp.sender, params.amount)
 
     @sp.entry_point
     def unstakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack=sp.TNat, index=sp.TNat))
-        """ on vérifie que le sender a bien deja staké """
+        
         sp.verify(self.data.userStakeLockPack.contains(sp.sender), Error.NeverStaked)
-        """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
+        
         sp.verify(self.data.userStakeLockPack[sp.sender].contains(params.pack), Error.NeverUsedPack)
-        """ on vérifie que le staking qu'il veut withdraw existe """
+       
         sp.verify(sp.len(self.data.userStakeLockPack[sp.sender][params.pack]) > params.index, Error.NotStaking)
         amount = sp.nat(0)
-        sp.if (self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now):
+        sp.if (self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now.add_seconds(1)):
             staking =self.data.userStakeLockPack[sp.sender][params.pack][params.index]
             amount = self.getReward(staking.timestamp, staking.timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod), staking.value, staking.rate) + staking.value
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
@@ -205,33 +220,36 @@ class FA12Staking(sp.Contract):
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
 
-                
+
     @sp.entry_point
     def unstakeFlex(self, params):
-        sp.set_type(params, sp.TNat)
-        """ on vérifie que le sender a bien deja staké """
+        sp.trace(self.data.userStakeFlexPack[sp.sender])
         sp.verify(self.data.userStakeFlexPack.contains(sp.sender), Error.NeverStaked)
-        """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
-        sp.verify(self.data.userStakeFlexPack[sp.sender].value >= params, Error.NotEnoughBalance)
+        sp.verify(self.data.userStakeFlexPack[sp.sender].value >= params, Error.NeverUsedPack)
 
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
-        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=params)
+        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
+        self.data.userStakeFlexPack[sp.sender].reward = sp.nat(0)
         self.data.userStakeFlexPack[sp.sender].value = sp.as_nat(self.data.userStakeFlexPack[sp.sender].value - params) 
-        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now
+        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(1)
         sp.trace(self.data.userStakeFlexPack)
-
+        
+        
+        
+        
     @sp.entry_point
     def claimRewardFlex(self):
         """ on vérifie que le sender a bien deja staké """
         sp.verify(self.data.userStakeFlexPack.contains(sp.sender), Error.NeverStaked)
         """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
-
+        staking= self.data.userStakeFlexPack[sp.sender] 
+        self.data.userStakeFlexPack[sp.sender].reward += self.getReward(staking.timestamp, sp.now.add_seconds(1), staking.value, self.data.stakingOptions[0].stakingPercentage)
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
-        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=params)
+        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
-        self.data.userStakeFlexPack[sp.sender].value = sp.as_nat(self.data.userStakeFlexPack[sp.sender].value - params) 
-        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now
+        self.data.userStakeFlexPack[sp.sender].reward = sp.as_nat(0) 
+        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(1)
         sp.trace(self.data.userStakeFlexPack)
 
     def getReward(self, start, end, value, rate):
@@ -261,7 +279,7 @@ def test():
     scenario.show([admin, alice, bob])
 
     scenario.h1("Initialize the contract")
-    contract = sp.address("KT11...")
+    contract = admin.address
     c1 = FA12Staking(contract, admin.address, reserve.address)
     scenario += c1
 
@@ -280,11 +298,11 @@ def test():
     
     scenario.h2("Creating a new staking option")
     scenario.h3("Alice tries to create a new staking option but does not succeed")
-    scenario += c1.createStakingOption(_id = 0, rate = 20, _max = 1000000000000, _min = 10, duration = 0).run(sender = alice, valid = False)
+    scenario += c1.createStakingOption(_id = 0, rate = 20, _max = 1000000000000, _min = 0, duration = 0).run(sender = alice, valid = False)
     scenario.h3("Admin creates a new staking option")
-    scenario += c1.createStakingOption(_id = 0, rate = 20, _max = 1000000000000, _min = 10, duration = 0).run(sender = admin)
+    scenario += c1.createStakingOption(_id = 0, rate = 20, _max = 1000000000000, _min = 0, duration = 0).run(sender = admin)
     scenario.h3("Admin creates a new staking option")
-    scenario += c1.createStakingOption(_id = 1, rate = 20, _max = 1000000000000, _min = 10, duration = 31536000).run(sender = admin)
+    scenario += c1.createStakingOption(_id = 1, rate = 20, _max = 1000000000000, _min = 0, duration = 31536000).run(sender = admin)
     
     scenario.h2("Updating MaxStake")
     scenario.h3("Alice tries to update the state variable but does not succeed")
@@ -313,52 +331,29 @@ def test():
     scenario.h3("Admin updates the state variable")
     scenario += c1.updateAdmin(admin=alice.address).run(sender=admin)
 
-    scenario.h2("Staking flex")
+    """scenario.h2("Staking flex")
     scenario.h3("Alice tries to stake flex and succeeds")
-    scenario += c1.stakeFlex(10000).run(sender=alice)
+    scenario += c1.stakeFlex(sp.record(amount = 10000)).run(sender=alice)
     scenario.h3("Alice tries to unstake a part and succeeds")
-    scenario += c1.unstakeFlex(1000).run(sender=alice, now = sp.timestamp(31536000))
+    scenario += c1.unstakeFlex(1000).run(sender=alice,  now = sp.timestamp(31536000))
     scenario.h3("Alice tries to stake more tokens")
-    scenario += c1.stakeFlex(100000).run(sender=alice, now=sp.timestamp(31536000*2))
+    scenario += c1.stakeFlex(sp.record(amount=100000)).run(sender=alice, now=sp.timestamp(31536000*2))
     scenario.h3("Alice tries to unstake and succeeds")
-    scenario += c1.unstakeFlex(109000).run(sender=alice, now=sp.timestamp(31536000*3))
-    
-    scenario.h3("Stake flex verify")
-    scenario.h4("Alice tries to stake a too low amount and fails")
-    scenario += c1.stakeFlex(1).run(sender=alice, valid = False)
-    scenario.h4("Alice tries to stake a too high amount and fails")
-    scenario += c1.stakeFlex(10000000000000000).run(sender=alice, valid = False)
-    
-    
-    scenario.h3("Unstake flex verify")
-    scenario.h4("Bob tries to unstake, he never staked so he fails")
-    scenario += c1.unstakeFlex(100).run(sender = bob, valid = False)
-    scenario.h4("bob tries to unstake more than he staked")
-    scenario += c1.stakeFlex(1101).run(sender = bob)
-    scenario += c1.unstakeFlex(10000000000000000000).run(sender = bob, valid = False)
+    scenario += c1.unstakeFlex(109000).run(sender=alice, now=sp.timestamp(31536000*3))"""
 
+    
     
     scenario.h2("Staking lock")
     scenario.h3("Alice tries to stake Lock and succeeds")
     scenario += c1.stakeLock(pack = 1, amount = 100).run(sender=alice)
-    scenario.h3("Alice tries to stake a too low amount and fails")
-    scenario += c1.stakeLock(pack = 1, amount = 1).run(sender = alice, valid = False)
-    scenario.h3("Alice tries to stake a too high amount and fails")
-    scenario += c1.stakeLock(pack = 1, amount = 1000000000000).run(sender = alice, valid = False)
+    scenario += c1.stakeLock(pack = 1, amount = 1001).run(sender=alice)
     scenario.h3("Alice tries to stake a pack that doesn't exist and fails")
     scenario += c1.stakeLock(pack = 2, amount = 10000).run(sender = alice, valid = False)
     
-    scenario.h2("Unstaking lock")
+    """scenario.h2("Unstaking lock")
     scenario.h3("Alice tries to unstake a lock pack and succeeds")
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender= alice)
     scenario.h3("Alice tries to unstake a pack she didn't use and fails")
     scenario += c1.unstakeLock(pack=2, index=3).run(sender=alice, valid = False)
-    
-    scenario.h3("Bob tries to unstake but he didn't stake so he fails")
-    scenario += c1.unstakeLock(pack=1, index=0).run(sender=bob, valid = False)
     scenario.h3("Alice tries to unstake a stake she didn't use and fails")
-    scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)
-    scenario.h3("Alice tries to unstake a stake she didn't use and fails")
-    scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)
-    
-   
+    scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)"""
