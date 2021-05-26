@@ -164,7 +164,7 @@ class FA12Staking(sp.Contract):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, amount = sp.TNat))
         sp.verify(params.amount > self.data.stakingOptions[params.pack].minStake, Error.AmountTooLow)
         sp.verify(params.amount < self.data.stakingOptions[params.pack].maxStake, Error.AmountTooHigh)
-        staking = sp.record(timestamp=sp.now.add_seconds(1), rate = self.data.stakingOptions[params.pack].stakingPercentage, value = params.amount)
+        staking = sp.record(timestamp=sp.now.add_seconds(0), rate = self.data.stakingOptions[params.pack].stakingPercentage, value = params.amount)
         sp.if ~self.data.userStakeLockPack.contains(sp.sender):
             self.initUserStaking(sp.sender, params.pack, staking)
         sp.else:
@@ -177,9 +177,9 @@ class FA12Staking(sp.Contract):
 
 
     def updateStakingFlex(self, addr, amount):
-        #self.data.userStakeFlexPack[addr].reward = self.getReward(self.data.userStakeFlexPack[addr].timestamp, sp.now, self.data.userStakeFlexPack[addr].value, self.data.stakingOptions[0].stakingPercentage)
+        self.data.userStakeFlexPack[addr].reward = self.getReward(self.data.userStakeFlexPack[addr].timestamp, sp.now, self.data.userStakeFlexPack[addr].value, self.data.stakingOptions[0].stakingPercentage)
         self.data.userStakeFlexPack[addr].value += amount
-        self.data.userStakeFlexPack[addr].timestamp = sp.now.add_seconds(1)
+        self.data.userStakeFlexPack[addr].timestamp = sp.now.add_seconds(0)
         
     @sp.entry_point
     def stakeFlex(self, params):
@@ -189,7 +189,7 @@ class FA12Staking(sp.Contract):
         
         # Cette ligne marche po
         sp.if ~self.data.userStakeFlexPack.contains(sp.sender):
-            self.data.userStakeFlexPack[sp.sender] = sp.record(timestamp = sp.now.add_seconds(1), value = params.amount + sp.nat(0), reward = sp.nat(0))
+            self.data.userStakeFlexPack[sp.sender] = sp.record(timestamp = sp.now.add_seconds(0), value = params.amount + sp.nat(0), reward = sp.nat(0))
 
         sp.else:
             self.updateStakingFlex(sp.sender, params.amount)
@@ -204,7 +204,7 @@ class FA12Staking(sp.Contract):
        
         sp.verify(sp.len(self.data.userStakeLockPack[sp.sender][params.pack]) > params.index, Error.NotStaking)
         amount = sp.nat(0)
-        sp.if (self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now.add_seconds(1)):
+        sp.if (self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now.add_seconds(0)):
             staking =self.data.userStakeLockPack[sp.sender][params.pack][params.index]
             amount = self.getReward(staking.timestamp, staking.timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod), staking.value, staking.rate) + staking.value
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
@@ -218,13 +218,12 @@ class FA12Staking(sp.Contract):
         sp.trace(self.data.userStakeFlexPack[sp.sender])
         sp.verify(self.data.userStakeFlexPack.contains(sp.sender), Error.NeverStaked)
         sp.verify(self.data.userStakeFlexPack[sp.sender].value >= params, Error.NeverUsedPack)
-
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
         self.data.userStakeFlexPack[sp.sender].reward = sp.nat(0)
         self.data.userStakeFlexPack[sp.sender].value = sp.as_nat(self.data.userStakeFlexPack[sp.sender].value - params) 
-        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(1)
+        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
         sp.trace(self.data.userStakeFlexPack)
         
         
@@ -236,12 +235,12 @@ class FA12Staking(sp.Contract):
         sp.verify(self.data.userStakeFlexPack.contains(sp.sender), Error.NeverStaked)
         """ on vérifie que le sender a deja staké le pack qu'il veut redeem """
         staking= self.data.userStakeFlexPack[sp.sender] 
-        self.data.userStakeFlexPack[sp.sender].reward += self.getReward(staking.timestamp, sp.now.add_seconds(1), staking.value, self.data.stakingOptions[0].stakingPercentage)
+        self.data.userStakeFlexPack[sp.sender].reward += self.getReward(staking.timestamp, sp.now.add_seconds(0), staking.value, self.data.stakingOptions[0].stakingPercentage)
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
         self.data.userStakeFlexPack[sp.sender].reward = sp.as_nat(0) 
-        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(1)
+        self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
         sp.trace(self.data.userStakeFlexPack)
 
     def getReward(self, start, end, value, rate):
@@ -323,7 +322,7 @@ def test():
     scenario.h3("Admin updates the state variable")
     scenario += c1.updateAdmin(admin=alice.address).run(sender=admin)
 
-    """scenario.h2("Staking flex")
+    scenario.h2("Staking flex")
     scenario.h3("Alice tries to stake flex and succeeds")
     scenario += c1.stakeFlex(sp.record(amount = 10000)).run(sender=alice)
     scenario.h3("Alice tries to unstake a part and succeeds")
@@ -331,7 +330,7 @@ def test():
     scenario.h3("Alice tries to stake more tokens")
     scenario += c1.stakeFlex(sp.record(amount=100000)).run(sender=alice, now=sp.timestamp(31536000*2))
     scenario.h3("Alice tries to unstake and succeeds")
-    scenario += c1.unstakeFlex(109000).run(sender=alice, now=sp.timestamp(31536000*3))"""
+    scenario += c1.unstakeFlex(109000).run(sender=alice, now=sp.timestamp(31536000*3))
 
     
     
@@ -342,10 +341,10 @@ def test():
     scenario.h3("Alice tries to stake a pack that doesn't exist and fails")
     scenario += c1.stakeLock(pack = 2, amount = 10000).run(sender = alice, valid = False)
     
-    """scenario.h2("Unstaking lock")
+    scenario.h2("Unstaking lock")
     scenario.h3("Alice tries to unstake a lock pack and succeeds")
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender= alice)
     scenario.h3("Alice tries to unstake a pack she didn't use and fails")
     scenario += c1.unstakeLock(pack=2, index=3).run(sender=alice, valid = False)
     scenario.h3("Alice tries to unstake a stake she didn't use and fails")
-    scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)"""
+    scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)
