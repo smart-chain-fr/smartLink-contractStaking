@@ -413,7 +413,6 @@ def test():
     scenario.h3("Alice tries to unstake a stake she didn't use and fails")
     scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)
 
-<<<<<<< HEAD
 
 
     scenario.h2("Alice tries to redeem rewards")
@@ -423,8 +422,6 @@ def test():
     scenario += c1.claimRewardFlex().run(sender=alice, now = sp.timestamp(31536000*2))
     scenario.h3("Bob tries to claim his rewards without staking")
     scenario += c1.claimRewardFlex().run(sender=bob, valid = False)
-=======
->>>>>>> 916dc86a3ad302ada9d6a6f9ff95f956d1474c98
     scenario.h1("Attempt to update metadata")
     c1.update_metadata(key = "", value = sp.bytes("0x00")).run(sender = alice)
     scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
