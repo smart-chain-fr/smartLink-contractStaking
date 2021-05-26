@@ -48,12 +48,49 @@ Options = sp.big_map(
         )
     )
 
+TZIP16_Metadata_Base = {
+    "name"          : "SMAK Staking",
+    "description"   : "SMAK Staking smart-contract",
+    "authors"       : [
+        "Smartlink Dev Team <email@domain.com>"
+    ],
+    "homepage"      : "https://smartpy.io",
+    "interfaces"    : [
+        "TZIP-007-2021-04-17",
+        "TZIP-016-2021-04-17"
+    ],
+}
+
 def call(c, x):
     sp.transfer(x, sp.mutez(0), c)
 
+class FA12Staking_config:
+    def __init__(
+        self,
+        support_upgradable_metadata         = False,
+        use_token_metadata_offchain_view    = True,
+    ):
+        self.support_upgradable_metadata = support_upgradable_metadata
+        # Whether the contract metadata can be upgradable or not.
+        # When True a new entrypoint `change_metadata` will be added.
 
-class FA12Staking(sp.Contract):
-    def __init__(self, contract, admin, reserve, **kargs):
+        self.use_token_metadata_offchain_view = use_token_metadata_offchain_view
+        # Include offchain view for accessing the token metadata (requires TZIP-016 contract metadata)
+
+class FA12Staking_common:
+    def normalize_metadata(self, metadata):
+        """
+            Helper function to build metadata JSON (string => bytes).
+        """
+        for key in metadata:
+            metadata[key] = sp.utils.bytes_of_string(metadata[key])
+
+        return metadata
+        
+class FA12Staking_core(sp.Contract, FA12Staking_common):
+    def __init__(self, contract, admin, reserve, config, **kargs):
+        
+        self.config = config
         self.init(
             FA12TokenContract=contract,
             admin=admin,
@@ -139,7 +176,7 @@ class FA12Staking(sp.Contract):
         sp.verify(self.data.stakingOptions.contains(params._id), Error.NotStakingOpt)
         self.data.stakingOptions[params._id].minStake = params._min
   
-  
+class FA12Staking_methods(FA12Staking_core):
     def getReward(self, start, end, value, rate):
         k = sp.nat(10000000000)
         period = end - start
@@ -230,6 +267,47 @@ class FA12Staking(sp.Contract):
         self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
         sp.trace(self.data.userStakeFlexPack)
 
+class FA12_Staking_contract_metadata(FA12Staking_core):
+    """
+        SPEC: https://gitlab.com/tzip/tzip/-/blob/master/proposals/tzip-16/tzip-16.md
+
+        This class offers utilities to define and set TZIP-016 contract metadata.
+    """
+    def generate_tzip16_metadata(self):
+        metadata = {
+            **TZIP16_Metadata_Base
+        }
+
+        self.init_metadata("metadata", metadata)
+
+    def set_contract_metadata(self, metadata):
+        """
+           Set contract metadata
+        """
+        self.update_initial_storage(
+            metadata = sp.big_map(self.normalize_metadata(metadata))
+        )
+
+        if self.config.support_upgradable_metadata:
+            def update_metadata(self, key, value):
+                """
+                    An entry-point to allow the contract metadata to be updated.
+
+                    Can be removed with `FA12_config(support_upgradable_metadata = False, ...)`
+                """
+                sp.verify_equal(self.data.admin, sp.sender, Error.NotAdmin)
+                self.data.metadata[key] = value
+            self.update_metadata = sp.entry_point(update_metadata)
+            
+class FA12Staking(FA12Staking_core, FA12_Staking_contract_metadata, FA12Staking_methods):
+    def __init__(self, contract, admin, reserve, config, contract_metadata = None):
+        FA12Staking_core.__init__(self, contract, admin, reserve, config)
+        if contract_metadata is not None:
+            self.set_contract_metadata(contract_metadata)
+        # This is only an helper, it produces metadata in the output panel
+        # that users can copy and upload to IPFS.
+        self.generate_tzip16_metadata()
+            
 @sp.add_test(name="Minimal")
 def test():
     scenario = sp.test_scenario()
@@ -247,8 +325,9 @@ def test():
     scenario.show([admin, alice, bob])
 
     scenario.h1("Initialize the contract")
-    contract = admin.address
-    c1 = FA12Staking(contract, admin.address, reserve.address)
+    contract = sp.address("KT11...")
+    contract_metadata = {}
+    c1 = FA12Staking(contract, admin.address, reserve.address, config = FA12Staking_config(support_upgradable_metadata = True), contract_metadata = contract_metadata)
     scenario += c1
 
     scenario.h1("Tests")
@@ -323,3 +402,7 @@ def test():
     scenario += c1.unstakeLock(pack=2, index=3).run(sender=alice, valid = False)
     scenario.h3("Alice tries to unstake a stake she didn't use and fails")
     scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)
+
+    scenario.h1("Attempt to update metadata")
+    c1.update_metadata(key = "", value = sp.bytes("0x00")).run(sender = alice)
+    scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
