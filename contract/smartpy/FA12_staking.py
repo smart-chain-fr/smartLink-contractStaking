@@ -269,6 +269,8 @@ class FA12Staking_methods(FA12Staking_core):
 
     def getReward(self, start, end, value, rate):
         k = sp.nat(10000000000)
+        sp.trace(start)
+        sp.trace(end)
         period = end - start
         sp.trace(period)
         timeRatio = k * sp.as_nat(period) / sp.as_nat(sp.timestamp(0).add_days(365) - sp.timestamp(0))
@@ -417,9 +419,9 @@ def test():
 
     scenario.h2("Alice tries to redeem rewards")
     scenario.h3("Alice stakes flex and succeeds")
-    scenario+= c1.stakeFlex(amount = 10000).run(sender=alice, now=sp.timestamp(31536000))
+    scenario+= c1.stakeFlex(amount = 10000).run(sender=alice, now=sp.timestamp(3*31536000))
     scenario.h3("Alice tries to redeem rewards and succeds")
-    scenario += c1.claimRewardFlex().run(sender=alice, now = sp.timestamp(31536000*2))
+    scenario += c1.claimRewardFlex().run(sender=alice, now = sp.timestamp(31536000*4))
     scenario.h3("Bob tries to claim his rewards without staking")
     scenario += c1.claimRewardFlex().run(sender=bob, valid = False)
     scenario.h1("Attempt to update metadata")
