@@ -230,7 +230,7 @@ class FA12Staking_methods(FA12Staking_core):
        
         sp.verify(sp.len(self.data.userStakeLockPack[sp.sender][params.pack]) > params.index, Error.NotStaking)
         amount = sp.nat(0)
-        sp.if (self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_days(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now.add_seconds(0)):
+        sp.if (self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now.add_seconds(0)):
             staking = self.data.userStakeLockPack[sp.sender][params.pack][params.index]
             amount = self.getReward(staking.timestamp, staking.timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod), staking.value, staking.rate) + staking.value
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
@@ -424,6 +424,9 @@ def test():
     scenario += c1.claimRewardFlex().run(sender=alice, now = sp.timestamp(31536000*4))
     scenario.h3("Bob tries to claim his rewards without staking")
     scenario += c1.claimRewardFlex().run(sender=bob, valid = False)
+    
+    
+    
     scenario.h1("Attempt to update metadata")
     c1.update_metadata(key = "", value = sp.bytes("0x00")).run(sender = alice)
     scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
