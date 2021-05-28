@@ -263,10 +263,13 @@ class FA12Staking_methods(FA12Staking_core):
         sp.verify(self.data.userStakeFlexPack[sp.sender].value >= params.amount, Error.BalanceTooLow)
         
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
-        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[sp.sender].reward)
+        paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=params.amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract, entry_point="transfer").open_some(), paramCall)
         
-        self.data.userStakeFlexPack[sp.sender].reward = sp.nat(0)
+        self.data.userStakeFlexPack[sp.sender].reward += self.getReward(self.data.userStakeFlexPack[sp.sender].timestamp, sp.now.add_seconds(0), self.data.userStakeFlexPack[sp.sender].value, self.data.stakingOptions[0].stakingPercentage)
+        
+        
+        
         self.data.userStakeFlexPack[sp.sender].value = sp.as_nat(self.data.userStakeFlexPack[sp.sender].value - params.amount) 
         self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
         
@@ -279,7 +282,6 @@ class FA12Staking_methods(FA12Staking_core):
         
         """TRACE VERIFY REWARDS"""
         sp.trace(staking)
-        sp.trace(self.getReward(staking.timestamp, sp.now.add_seconds(0), staking.value, self.data.stakingOptions[0].stakingPercentage) )
         """TRACE VERIFY REWARDS"""
         
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
@@ -427,10 +429,10 @@ def test():
     scenario += c1.unstakeFlex(amount = 100).run(sender = alice, now = sp.timestamp(31536000))
     scenario.h3("Alice tries to unstake all of her tokens after 1 year and succeds")
     scenario += c1.unstakeFlex(amount = 20000).run(sender = alice, now = sp.timestamp(31536001))
-    """scenario.h3("Alice tries to unstake tokens even though she has already unstaked everything")
+    scenario.h3("Alice tries to unstake tokens even though she has already unstaked everything")
     scenario += c1.unstakeFlex(amount = 1000).run(sender = alice, now = sp.timestamp(31536000), valid = False)
     scenario.h3("Bob tries to unstake but he never staked")
-    scenario += c1.unstakeFlex(amount = 1000).run(sender = bob, valid = False)"""
+    scenario += c1.unstakeFlex(amount = 1000).run(sender = bob, valid = False)
     
     scenario.h2("Staking flex reward claiming")
     scenario.h3("Alice claims her rewards for her past stakings and succeeds (watch console)")
@@ -467,43 +469,6 @@ def test():
     scenario += c1.unstakeLock(pack = 3, index = 0).run(sender = alice, valid = False)
     scenario.h3("Bob tries to unstake but he has never staked and fails")
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender = bob, valid = False)
-    
-    
-    
-    
-    """scenario.h3("Alice tries to unstake a part and succeeds")
-    scenario += c1.unstakeFlex(amount = 1000).run(sender=alice,  now = sp.timestamp(31536000))
-    scenario.h3("Alice tries to stake more tokens")
-    scenario += c1.stakeFlex(sp.record(amount=100000)).run(sender=alice, now=sp.timestamp(31536000*2))
-    scenario.h3("Alice tries to unstake and succeeds")
-    scenario += c1.unstakeFlex(amount = 109000).run(sender=alice, now=sp.timestamp(31536000*3))"""
-    """
-    scenario.h2("Staking lock")
-    scenario.h3("Alice tries to stake Lock and succeeds")
-    scenario += c1.stakeLock(pack = 1, amount = 100).run(sender=alice)
-    scenario += c1.stakeLock(pack = 1, amount = 1001).run(sender=alice)
-    scenario.h3("Alice tries to stake a pack that doesn't exist and fails")
-    scenario += c1.stakeLock(pack = 2, amount = 10000).run(sender = alice, valid = False)
-    
-    scenario.h2("Unstaking lock")
-    scenario.h3("Alice tries to unstake a lock pack and succeeds")
-    scenario += c1.unstakeLock(pack = 1, index = 0).run(sender= alice)
-    scenario.h3("Alice tries to unstake a pack she didn't use and fails")
-    scenario += c1.unstakeLock(pack=2, index=3).run(sender=alice, valid = False)
-    scenario.h3("Alice tries to unstake a stake she didn't use and fails")
-    scenario += c1.unstakeLock(pack=1, index=3).run(sender=alice, valid = False)
-
-
-
-    scenario.h2("Alice tries to redeem rewards")
-    scenario.h3("Alice stakes flex and succeeds")
-    scenario+= c1.stakeFlex(amount = 10000).run(sender=alice, now=sp.timestamp(3*31536000))
-    scenario.h3("Alice tries to redeem rewards and succeds")
-    scenario += c1.claimRewardFlex().run(sender=alice, now = sp.timestamp(31536000*4))
-    scenario.h3("Bob tries to claim his rewards without staking")
-    scenario += c1.claimRewardFlex().run(sender=bob, valid = False)"""
-    
-    
     
     scenario.h1("Attempt to update metadata")
     c1.update_metadata(key = "", value = sp.bytes("0x00")).run(sender = alice)
