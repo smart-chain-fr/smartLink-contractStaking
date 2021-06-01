@@ -104,18 +104,28 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
             **kargs
         )
 
+
+    # The function updateReserve will update the reserve address
+    # The function takes as parameter:
+    # - the new reserve address
     @sp.entry_point
     def updateReserve(self, params):
         sp.set_type(params, sp.TRecord(reserve=sp.TAddress))
         sp.verify_equal(sp.sender, self.data.admin, Error.NotAdmin)
         self.data.reserve = params.reserve
 
+    # The function updateAdmin will update the admin address
+    # The function takes as parameter:
+    # - the new admin address
     @sp.entry_point
     def updateAdmin(self, params):
         sp.set_type(params, sp.TRecord(admin=sp.TAddress))
         sp.verify_equal(sp.sender, self.data.admin, Error.NotAdmin)
         self.data.admin = params.admin
-        
+    
+    # The function updateContract will update the address of the token contract
+    # The function takes as parameter:
+    # - the new token contract address
     @sp.entry_point
     def updateContract(self, params):
         sp.set_type(params, sp.TRecord(contract = sp.TAddress))
@@ -123,12 +133,16 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
         self.data.FA12TokenContract = params.contract
     
     
+    # The function updateVotingContract will update the address of the voting contract
+    # The function takes as parameter:
+    # - the new voting contract address
     @sp.entry_point
     def updateVotingContract(self, params):
         sp.set_type(params, sp.TRecord(contract = sp.TAddress))
         sp.verify_equal(sp.sender, self.data.admin, Error.NotAdmin)
         self.data.votingContract = sp.some(params.contract)
     
+
     @sp.sub_entry_point
     def is_voting_contract(self, contract):
         sp.if self.data.votingContract.is_some():
@@ -159,7 +173,10 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
         self.data.stakingOptions[params._id] = option
     
     
-    
+    # The function updateStakingOptionRate will update the rate of a specified staking pack
+    # The function takes as parameters:
+    # - the staking pack id
+    # - the staking pack new rate
     @sp.entry_point
     def updateStakingOptionRate(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, rate = sp.TNat).layout(("_id as id", "rate")))
@@ -167,20 +184,34 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
         sp.verify(self.data.stakingOptions.contains(params._id), Error.NotStakingOpt)
         self.data.stakingOptions[params._id].stakingPercentage = params.rate
 
+
+    # The function updateStakingOptionDuration will update the duration of the staking pack
+    # The function takes as parameters:
+    # - the staking pack id
+    # - the staking pack new duration
     @sp.entry_point
     def updateStakingOptionDuration(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, duration = sp.TInt).layout(("_id as id", "duration")))
         sp.verify(self.is_voting_contract(sp.sender) | (self.data.admin == sp.sender), Error.NotAdmin)
         sp.verify(self.data.stakingOptions.contains(params._id), Error.NotStakingOpt)
         self.data.stakingOptions[params._id].stakingPeriod = params.duration
-        
+    
+
+    # The function updateStakingOptionMax will update the max a user can stake in one transaction
+    # The function takes as parameters:
+    # - the staking pack id
+    # - the staking pack new max amount per transaction 
     @sp.entry_point
     def updateStakingOptionMax(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, _max = sp.TNat).layout(("_id as id", "_max as max")))
         sp.verify(self.is_voting_contract(sp.sender) | (self.data.admin == sp.sender), Error.NotAdmin)
         sp.verify(self.data.stakingOptions.contains(params._id), Error.NotStakingOpt)
         self.data.stakingOptions[params._id].maxStake = params._max
-        
+    
+    # The function updateStakingOptionMax will update the min a user can stake in one transaction
+    # The function takes as parameters:
+    # - the staking pack id
+    # - the staking pack new min amount per transaction 
     @sp.entry_point
     def updateStakingOptionMin(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, _min = sp.TNat).layout(("_id as id", "_min as min")))
