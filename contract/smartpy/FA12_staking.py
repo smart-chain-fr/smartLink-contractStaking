@@ -209,11 +209,18 @@ class FA12Staking_methods(FA12Staking_core):
     
     # The updateStakingFlex function will add the amount to the stake and update the timestamp
     # the function takes as parameters
+    # - the address of the sender
+    # - the amount the user wants to add to the staking
     def updateStakingFlex(self, addr, amount):
         self.data.userStakeFlexPack[addr].reward = self.getReward(sp.record(start = self.data.userStakeFlexPack[addr].timestamp, end = sp.now.add_seconds(0),  value = self.data.userStakeFlexPack[addr].value, rate = self.data.stakingOptions[0].stakingPercentage))
         self.data.userStakeFlexPack[addr].value += amount
         self.data.userStakeFlexPack[addr].timestamp = sp.now.add_seconds(0)
-        
+
+
+    # The stakeLock function will create a staking lock with the parameters of the specified pack
+    # The function takes as parameters:
+    # - the pack id
+    # - the staking index
     @sp.entry_point
     def stakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, amount = sp.TNat))
@@ -237,6 +244,10 @@ class FA12Staking_methods(FA12Staking_core):
                 index = sp.len(self.data.userStakeLockPack[sp.sender][params.pack])
                 self.data.userStakeLockPack[sp.sender][params.pack][index] = staking
 
+
+    # The stakeFlex function will create a staking flex with the parameters of the current staking flex parameters
+    # The function takes as parameter:
+    # - The amount staked
     @sp.entry_point
     def stakeFlex(self, params):
         sp.set_type(params, sp.TRecord(amount = sp.TNat))
@@ -253,6 +264,10 @@ class FA12Staking_methods(FA12Staking_core):
         sp.else:
             self.updateStakingFlex(sp.sender, params.amount)
 
+    # The unstakeLock function will unstake a locked staking
+    # The function takes as parameters:
+    # - the staking pack
+    # - the index of the staking
     @sp.entry_point
     def unstakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack=sp.TNat, index=sp.TNat))
@@ -261,13 +276,16 @@ class FA12Staking_methods(FA12Staking_core):
         sp.verify(self.data.userStakeLockPack.contains(sp.sender), Error.NeverStaked)
         sp.verify(self.data.userStakeLockPack[sp.sender].contains(params.pack), Error.NeverUsedPack)
         sp.verify(self.data.userStakeLockPack[sp.sender][params.pack].contains(params.index), Error.NotStaking)
-        sp.trace(self.data.userStakeLockPack)
+
         sp.if self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now:
             self.unlockWithReward(params)
         sp.else:
             self.unlockWithoutReward(params)
             
-            
+    # The unlockWithReward function will send the tokens back to the user with the rewards
+    # The function takes as parameters:
+    # - the staking pack
+    # - the index of the staking
     @sp.sub_entry_point
     def unlockWithReward(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, index = sp.TNat))
@@ -276,20 +294,25 @@ class FA12Staking_methods(FA12Staking_core):
         amount += self.getReward(sp.record(start = staking.timestamp, end = staking.timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod), value = staking.value, rate = staking.rate))
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
-        sp.trace(amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
-        
+    
+    # The unlockWithoutReward function will send the tokens back to tthe user without the reward
+    # The function takes as parameters:
+    # - the staking pack
+    # - the index of the staking
     @sp.sub_entry_point
     def unlockWithoutReward(self, params):
         sp.set_type(params, sp.TRecord(index = sp.TNat, pack = sp.TNat))
         amount = self.data.userStakeLockPack[sp.sender][params.pack][params.index].value
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
-        sp.trace(amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
-        
+    
+    # The function unstakeFlex will send the specified amount of tokens to the user
+    # The function takes as parameter
+    # - the amount to unstake
     @sp.entry_point
     def unstakeFlex(self, params):
         sp.set_type(params, sp.TRecord(amount = sp.TNat))
@@ -306,7 +329,10 @@ class FA12Staking_methods(FA12Staking_core):
         
         self.data.userStakeFlexPack[sp.sender].value = sp.as_nat(self.data.userStakeFlexPack[sp.sender].value - params.amount) 
         self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
-        
+    
+
+    # The function claimRewardFlex will send the rewards of a staking flex to the user
+    # the function takes no parameter
     @sp.entry_point
     def claimRewardFlex(self):
         sp.verify(self.data.userStakeFlexPack.contains(sp.sender), Error.NeverStaked)
@@ -322,6 +348,12 @@ class FA12Staking_methods(FA12Staking_core):
         self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
 
 
+    # The function will compute the rewards for a specified value during a period at a certain rate
+    # The function takes as parameters:
+    # - the starting timestamp
+    # - the ending timestamp
+    # - the value of the staking
+    # - the rate of the staking
     def getReward(self, params):
         sp.set_type(params, sp.TRecord(start=sp.TTimestamp, end = sp.TTimestamp, value= sp.TNat, rate=sp.TNat))
         k = sp.nat(10000000000)
@@ -460,7 +492,7 @@ def test():
     scenario.h3("Alice tries to unstake some of her tokens after 1 year and succeeds")
     scenario += c1.unstakeFlex(amount = 100).run(sender = alice, now = sp.timestamp(31536000))
     scenario.h3("Alice tries to unstake all of her tokens after 1 year and succeds")
-    scenario += c1.unstakeFlex(amount = 20000).run(sender = alice, now = sp.timestamp(31536001))
+    scenario += c1.unstakeFlex(amount = 20000).run(sender = alice, now = sp.timestamp(2*31536000))
     scenario.h3("Alice tries to unstake tokens even though she has already unstaked everything")
     scenario += c1.unstakeFlex(amount = 1000).run(sender = alice, now = sp.timestamp(31536000), valid = False)
     scenario.h3("Bob tries to unstake but he never staked")
@@ -492,15 +524,15 @@ def test():
     scenario.h3("Alice tries to unstake her tokens before the end of the locking period and does not get her rewards (watch console)")
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender = alice, now = sp.timestamp(31535999))
     scenario.h3("Alice tries to unstake her tokens after the locking period and gets here rewards (watch console)")
-    scenario += c1.unstakeLock(pack = 1, index = 1).run(sender = alice, now = sp.timestamp(32537011))
-    """scenario.h3("Alice tries to unstake and already unstaked staking and fails")
+    scenario += c1.unstakeLock(pack = 1, index = 1).run(sender = alice, now = sp.timestamp(31536011))
+    scenario.h3("Alice tries to unstake and already unstaked staking and fails")
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender = alice, now = sp.timestamp(31536001), valid = False)
     scenario.h3("Alice tries to unstake a pack she never used and fails")
     scenario += c1.unstakeLock(pack = 2, index = 0).run(sender = alice, valid = False)
     scenario.h3("Alice tries to unstake a pack that doesn't exist and fails")
     scenario += c1.unstakeLock(pack = 3, index = 0).run(sender = alice, valid = False)
     scenario.h3("Bob tries to unstake but he has never staked and fails")
-    scenario += c1.unstakeLock(pack = 1, index = 0).run(sender = bob, valid = False)"""
+    scenario += c1.unstakeLock(pack = 1, index = 0).run(sender = bob, valid = False)
     
     scenario.h1("Attempt to update metadata")
     c1.update_metadata(key = "", value = sp.bytes("0x00")).run(sender = alice)
