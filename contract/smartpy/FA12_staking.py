@@ -239,7 +239,7 @@ class FA12Staking_methods(FA12Staking_core):
     
     
     # The updateStakingFlex function will add the amount to the stake and update the timestamp
-    # the function takes as parameters
+    # The function takes as parameters:
     # - the address of the sender
     # - the amount the user wants to add to the staking
     def updateStakingFlex(self, addr, amount):
@@ -328,7 +328,7 @@ class FA12Staking_methods(FA12Staking_core):
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
     
-    # The unlockWithoutReward function will send the tokens back to tthe user without the reward
+    # The unlockWithoutReward function will send the tokens back to the user without the reward
     # The function takes as parameters:
     # - the staking pack
     # - the index of the staking
