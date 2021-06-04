@@ -8,8 +8,9 @@
  var signer = require("@taquito/signer"); // Used to initialize a signer
  
  var taquito = require("@taquito/taquito"); // Used for the taquito calls to the smart contract
- const config = require('../config/config.js'); // Config file with config variables
- var storage = require('../michelson-json/storage.js') // Initial storage of the smart contract
+ const config = require('./config/config.js'); // Config file with config variables
+ var storage = require('./michelson-json/storage.js') // Initial storage of the smart contract
+ 
  // Connection to the Tezos RPC
  var Tezos = new taquito.TezosToolkit(config.RPC_ADDRESS);
  
@@ -38,7 +39,7 @@
      // Originate the contract
      const originationOp = await Tezos.contract.originate({
          // Smart contract Michelson JSON code
-         code: require('./ICO-contract.json'),
+         code: require('./michelson-json/contract.json'),
          init: storage
      }).catch(error => {
          console.log(error)
