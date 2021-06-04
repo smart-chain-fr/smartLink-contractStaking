@@ -98,7 +98,6 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
             reserve=reserve,
             userStakeLockPack=UserStakeLockPack,
             userStakeFlexPack=UserStakeFlexPack,
-            totalReward = TotalReward,
             stakingOptions=Options,
             votingContract = sp.none,
             **kargs
@@ -425,14 +424,6 @@ class FA12Staking_methods(FA12Staking_core):
     def getVotingContract(self, params):
         sp.set_type(params, sp.TUnit)
         sp.result(self.data.votingContract.open_some(message = None))
-        
-    @sp.utils.view(sp.TNat)
-    def getTotalReward(self, params):
-        sp.set_type(params, sp.TAddress)
-        sp.if self.data.totalReward.contains(params):
-            sp.result(self.data.totalReward[params])
-        sp.else:
-            sp.result(sp.nat(0))
             
     @sp.utils.view(sp.TBigMap(sp.TAddress, StakeFlex))
     def getAllStakeFlex(self, params):
@@ -485,6 +476,22 @@ class FA12Staking_methods(FA12Staking_core):
             sp.result(self.data.userStakeFlexPack[params])
         sp.else:
             sp.failwith("There is no flexible staking for this address")
+            
+    @sp.utils.view(sp.TNat)
+    def getCurrentPendingRewards(self, params):
+        sp.set_type(params, sp.TAddress)
+        x = sp.local("x", sp.nat(0))
+        sp.if self.data.userStakeFlexPack.contains(params):
+            userFlexMap = self.data.userStakeFlexPack[params]
+            x.value = x.value + userFlexMap.reward + self.getReward(sp.record(start = userFlexMap.timestamp, end = sp.now.add_seconds(0), value = userFlexMap.value, rate = self.data.stakingOptions[0].stakingPercentage))
+        
+        sp.if self.data.userStakeLockPack.contains(params):
+            sp.for pack_id in self.data.userStakeLockPack[params].keys():
+                sp.for item in self.data.userStakeLockPack[params].get(pack_id).values():
+                    computed_end = item.timestamp.add_seconds(self.data.stakingOptions[pack_id].stakingPeriod)
+                    sp.if computed_end < sp.now:
+                        x.value = x.value + self.getReward(sp.record(start = item.timestamp, end = computed_end, value = item.value, rate = item.rate))
+        sp.result(x.value)
 
 class FA12_Staking_contract_metadata(FA12Staking_core):
     """
@@ -666,6 +673,8 @@ def test():
     
     scenario.h3("Alice stakes again a locked pack")
     scenario += c1.stakeLock(pack = 1, amount = 100000).run(sender = alice)
+    scenario.h3("Alice stakes again in flex pack")
+    scenario += c1.stakeFlex(amount = 10000).run(sender=alice, now = sp.timestamp(94608000))
     
     scenario.h2("Attempt to update metadata")
     c1.update_metadata(key = "", value = sp.bytes("0x00")).run(sender = alice)
@@ -708,13 +717,13 @@ def test():
     view_staking_flex = Viewer(sp.TRecord(timestamp=sp.TTimestamp, value=sp.TNat, reward=sp.TNat))
     scenario += view_staking_flex
     c1.getFlexStakeInformation((alice.address, view_staking_flex.typed.target))
-    scenario.verify_equal(view_staking_flex.data.last, sp.some(sp.record(timestamp = sp.timestamp(94608000), value = 0, reward = 0)))
+    scenario.verify_equal(view_staking_flex.data.last, sp.some(sp.record(timestamp = sp.timestamp(94608000), value = 10000, reward = 0)))
     
     scenario.h3("List all flex stakes")
     view_all_staking_flex = Viewer(sp.TBigMap(sp.TAddress, StakeFlex))
     scenario += view_all_staking_flex
     c1.getAllStakeFlex((sp.unit, view_all_staking_flex.typed.target))
-    scenario.verify_equal(view_all_staking_flex.data.last, sp.some(sp.big_map({alice.address : sp.record(reward = 0, timestamp = sp.timestamp(94608000), value = 0)})))
+    scenario.verify_equal(view_all_staking_flex.data.last, sp.some(sp.big_map({alice.address : sp.record(reward = 0, timestamp = sp.timestamp(94608000), value = 10000)})))
     
     scenario.h2("Lock staking")
     scenario.h3("List all locked stakes")
@@ -740,3 +749,10 @@ def test():
     scenario += view_staking_lock_pack_with_index
     c1.getLockStakeByPackAndId((sp.record(address = alice.address, pack = 1, id_ = 0), view_staking_lock_pack_with_index.typed.target))
     scenario.verify_equal(view_staking_lock_pack_with_index.data.last, sp.some(sp.record(rate = 20, timestamp = sp.timestamp(31536001), value = 100000)))
+    
+    
+    scenario.h2("Get current pending total rewards")
+    view_current_rewards = Viewer(sp.TNat)
+    scenario += view_current_rewards
+    c1.getCurrentPendingRewards((alice.address, view_current_rewards.typed.target)).run(now = sp.timestamp(94708000))
+    scenario.verify_equal(view_current_rewards.data.last, sp.some(sp.nat(20002)))
