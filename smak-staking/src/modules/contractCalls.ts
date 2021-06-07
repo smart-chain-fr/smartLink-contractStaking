@@ -19,30 +19,24 @@ export class ContractCalls{
         const options = {
             name: 'SMAK Staking',
             iconUrl: 'https://tezostaquito.io/img/favicon.png',
-            preferredNetwork: this.network,
-            eventHandlers: {
-              PERMISSION_REQUEST_SUCCESS: {
-                handler: async (data: any) => {
-                  console.log('permission data:', data);
-                },
-              },
-            },
+            preferredNetwork: this.network
         };
         this.wallet = new BeaconWallet(options);
     }
 
     public async setupWallet(){
-        // Request the permission
-        await this.wallet.requestPermissions({
-            network: {
-              type: this.network,
-            },
-          });
+      const activeAccount = await this.wallet.client.getActiveAccount();
 
-        // Set the wallet provider for later
+      if (activeAccount) {
+        // If defined, the user is connected to a wallet.
+        // You can now do an operation request, sign request, or send another permission request to switch wallet
+        console.log("Already connected");
+      } else {
+        const permissions = await this.wallet.requestPermissions();
         this.tk.setWalletProvider(this.wallet);
-        
-        const address = await this.wallet.getPKH();
-        return address;
+      }
+    
+      const address = await this.wallet.getPKH();
+      return address;
     }
 }
