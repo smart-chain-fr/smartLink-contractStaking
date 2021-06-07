@@ -1,8 +1,8 @@
 import { Component, Vue } from 'vue-property-decorator';
-import { ContractCalls } from '../../modules/contractCalls'
+import { Wallet } from '../../modules/wallet'
 @Component
 export default class Staking extends Vue {
-    private wallet: ContractCalls = new ContractCalls();
+    private wallet: Wallet = new Wallet();
 
     async connection(){
         const addr = await this.wallet.setupWallet();

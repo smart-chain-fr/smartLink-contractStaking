@@ -3,7 +3,7 @@ import { config } from "../../config/config";
 import { NetworkType } from "@airgap/beacon-sdk";
 import { BeaconWallet } from "@taquito/beacon-wallet";
 
-export class ContractCalls{
+export class Wallet{
     private tk: TezosToolkit;
     private wallet: BeaconWallet;
     private network: NetworkType;
