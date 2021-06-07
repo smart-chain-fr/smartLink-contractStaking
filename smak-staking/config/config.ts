@@ -8,19 +8,9 @@ dotenv.config({
 
 export const config = {
     // Environment variables
-    NODE_ENV: process.env.NODE_ENV,
+    NODE_ENV: process.env.NODE_ENV || 'development',
 
     // Tezos Network variables
-    RPC_ADDRESS: process.env.RPC_ADDRESS,   
+    RPC_ADDRESS: process.env.RPC_ADDRESS || 'https://edonet.smartpy.io',   
 
-    // Signer Variables
-    ADDRESS: process.env.ADDRESS,
-    SIGNER_EMAIL: process.env.SIGNER_EMAIL,
-    SIGNER_PASSWORD: process.env.SIGNER_PASSWORD,
-    SIGNER_MNEMONIC: process.env.SIGNER_MNEMONIC,
-    SIGNER_SECRET: process.env.SIGNER_SECRET,
-
-    // Contract Variables
-    CONTRACT_FA12TOKEN_CONTRACT_ADDRESS: process.env.CONTRACT_FA12TOKEN_CONTRACT_ADDRESS,
-    CONTRACT_RESERVE_ADDRESS: process.env.CONTRACT_RESERVE_ADDRESS
-  }
+}

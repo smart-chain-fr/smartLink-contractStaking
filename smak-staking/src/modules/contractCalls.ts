@@ -22,7 +22,7 @@ export class ContractCalls{
             preferredNetwork: this.network,
             eventHandlers: {
               PERMISSION_REQUEST_SUCCESS: {
-                handler: async (data) => {
+                handler: async (data: any) => {
                   console.log('permission data:', data);
                 },
               },
