@@ -1,0 +1,16 @@
+{
+  "name": "staking-contract",
+  "version": "1.0.0",
+  "description": "As you can see, there are four directories inside.  - **config**: required configuration in order to originate the contract - **michelson-json**: smart contract and its storage in michelson json - **origination**: script that originates the smart-contract - **smartpy**: smart-contract in smartpy",
+  "main": "originate.js",
+  "scripts": {
+    "originate": "node originate.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@taquito/signer": "^9.1.0",
+    "@taquito/taquito": "^9.1.0",
+    "dotenv": "^10.0.0"
+  }
+}
