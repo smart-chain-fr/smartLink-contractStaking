@@ -100,7 +100,7 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
             userStakeFlexPack=UserStakeFlexPack,
             stakingOptions=Options,
             votingContract = sp.none,
-            stakingHistory = sp.big_map(tkey = sp.TTimestamp, tvalue = sp.TInt),
+            stakingHistory = sp.map(tkey = sp.TTimestamp, tvalue = sp.TInt),
             **kargs
         )
 
@@ -571,8 +571,8 @@ def test():
 
     scenario.h1("Initialize the contract")
     contract = sp.address("KT1TezoooozzSmartPyzzSTATiCzzzwwBFA1")
-    contract_metadata = {}
-    c1 = FA12Staking(contract, admin.address, reserve.address, config = FA12Staking_config(support_upgradable_metadata = True), contract_metadata = contract_metadata)
+    
+    c1 = FA12Staking(contract, admin.address, reserve.address, config = FA12Staking_config(support_upgradable_metadata = True), contract_metadata = {})
     scenario += c1
 
     scenario.h1("Tests")
