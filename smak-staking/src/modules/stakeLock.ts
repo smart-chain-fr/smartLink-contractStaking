@@ -24,3 +24,24 @@ export class StakeLock {
         return this.value;
     }
 }
+
+export class StakeLockPack {
+    private stakeLockList: Map<number, StakeLock>;
+   
+    constructor()
+    {
+        this.stakeLockList = new Map()
+    }
+
+    getStakeLockList(){
+        return this.stakeLockList;
+    }
+
+    addStakeLockList(index: number, stakeLock: StakeLock){
+        this.stakeLockList.set(index, stakeLock)
+    }
+    
+    getStakeLock(index:number){
+        return this.stakeLockList.get(index);
+    }
+}

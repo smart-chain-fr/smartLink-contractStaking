@@ -8,9 +8,9 @@ export class Wallet{
     private wallet: BeaconWallet;
     private network: NetworkType;
 
-    constructor(){
+    constructor(tk: TezosToolkit){
         // Set the RPC
-        this.tk = new TezosToolkit(config.RPC_ADDRESS);
+        this.tk = tk
         
         // Set the network
         this.network = (config.NODE_ENV=="development")?NetworkType.EDONET:NetworkType.MAINNET;
@@ -32,8 +32,9 @@ export class Wallet{
         // You can now do an operation request, sign request, or send another permission request to switch wallet
         console.log("Already connected");
       } else {
-        const permissions = await this.wallet.requestPermissions();
-        this.tk.setWalletProvider(this.wallet);
+        await this.wallet.requestPermissions();
+        //this.tk.setWalletProvider(this.wallet);
+        this.tk.setProvider({wallet: this.wallet})
       }
     
       const address = await this.wallet.getPKH();
