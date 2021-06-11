@@ -39,7 +39,8 @@ UserStakeLockPack = sp.big_map(
 
 TotalReward = sp.big_map(tkey = sp.TAddress, tvalue = sp.TNat)
 
-Options = sp.big_map(
+Options = sp.map(
+    l = {sp.nat(0):sp.record(minStake = 0, maxStake = 1000000, stakingPeriod = 0, stakingPercentage = 20)},
     tkey=sp.TNat,
     tvalue= sp.TRecord(
             minStake=sp.TNat,
@@ -52,14 +53,9 @@ Options = sp.big_map(
 TZIP16_Metadata_Base = {
     "name"          : "SMAK Staking",
     "description"   : "SMAK Staking smart-contract",
-    "authors"       : [
-        "Smartlink Dev Team <email@domain.com>"
-    ],
+    "authors"       : "Smartlink Dev Team <email@domain.com>",
     "homepage"      : "https://smartpy.io",
-    "interfaces"    : [
-        "TZIP-007-2021-04-17",
-        "TZIP-016-2021-04-17"
-    ],
+    "interfaces"    : "TZIP-016-2021-04-17"
 }
 
 def call(c, x):
@@ -403,7 +399,7 @@ class FA12Staking_methods(FA12Staking_core):
         reward /= k*100
         return reward
         
-    @sp.utils.view(sp.TBigMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
+    @sp.utils.view(sp.TMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
     def getStakingOptions(self, params):
         sp.set_type(params, sp.TUnit)
         sp.result(self.data.stakingOptions)
@@ -571,8 +567,7 @@ def test():
 
     scenario.h1("Initialize the contract")
     contract = sp.address("KT1TezoooozzSmartPyzzSTATiCzzzwwBFA1")
-    
-    c1 = FA12Staking(contract, admin.address, reserve.address, config = FA12Staking_config(support_upgradable_metadata = True), contract_metadata = {})
+    c1 = FA12Staking(contract, admin.address, reserve.address, config = FA12Staking_config(support_upgradable_metadata = True), contract_metadata =TZIP16_Metadata_Base )
     scenario += c1
 
     scenario.h1("Tests")
@@ -591,8 +586,8 @@ def test():
     scenario.h2("Creating a new staking option")
     scenario.h3("Alice tries to create a new staking option but does not succeed")
     scenario += c1.createStakingOption(_id = 0, rate = 20, _max = 1000000000000, _min = 0, duration = 0).run(sender = alice, valid = False)
-    scenario.h3("Admin creates a new staking option")
-    scenario += c1.createStakingOption(_id = 0, rate = 20, _max = 1000000000000, _min = 0, duration = 0).run(sender = admin)
+    scenario.h3("Admin creates a new staking option that already exists")
+    scenario += c1.createStakingOption(_id = 0, rate = 20, _max = 1000000000000, _min = 0, duration = 0).run(sender = admin, valid = False)
     scenario.h3("Admin creates a new staking option")
     scenario += c1.createStakingOption(_id = 1, rate = 20, _max = 1000000000000, _min = 10, duration = 31536000).run(sender = admin)
     scenario.h3("Admin creates a new staking option")
@@ -700,10 +695,10 @@ def test():
     
     scenario.h2("Staking options")
     scenario.h3("List all staking options")
-    view_staking_options = Viewer(sp.TBigMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
+    view_staking_options = Viewer(sp.TMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
     scenario += view_staking_options
     c1.getStakingOptions((sp.unit, view_staking_options.typed.target))
-    scenario.verify_equal(view_staking_options.data.last, sp.some(sp.big_map({0:sp.record(minStake = 1000, maxStake = 1000000, stakingPercentage = 8, stakingPeriod = 10000), 1: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000), 2: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000)})))
+    scenario.verify_equal(view_staking_options.data.last, sp.some(sp.map({0:sp.record(minStake = 1000, maxStake = 1000000, stakingPercentage = 8, stakingPeriod = 10000), 1: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000), 2: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000)})))
     
     scenario.h3("Staking option by id")
     view_staking_option_by_id = Viewer(sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat))
