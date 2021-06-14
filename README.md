@@ -5,6 +5,10 @@ Smartlink addresses one of the biggest challenges in the global marketplace: ‘
 Smartlink aims to provide a user-centered escrow solution to secure online and face-to-face transactions while broadening payments acceptance options through integrated wrapped currencies.
 
 Smartlink proposes a new method to initiate commercial transactions by offering Trust-As-A-Service to incentivize commitment and eliminate the trust deficit in the global marketplace.
-# SMAK staking
-[WIP]
 
+# SMAK staking
+
+1. [Smartlink](#Smartlink)
+2. [Origination](https://github.com/Smartlinkhub/SMAK-Staking/blob/develop/contract/README.md)
+3. [Smart-contract](#Smartcontract)
+4. 
