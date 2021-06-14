@@ -63,12 +63,12 @@ Smartlink proposes a new method to initiate commercial transactions by offering 
 | admin                             |         TAddress                         |Address of the admin                                                        |
 | reserve                           |          TAddress                        |Address of the token reserve to pay the stakings                            |
 |userStakeLockPack                  |[UserStakeLockPack](#UserStakeLockPack)   |See the schema below                                                        |
-| StakeLock                         |        TRecord                           |Structure of a staking locked                                               |
+| StakeLock                         |        TRecord                           |Structure of a locked staking                                               |
 | StakeLock.timestamp               |        TTimestamp                        |Timestamp of the begining of the staking                                    |
 | StakeLock.rate                    |        TNat                              |Rate of the staking                                                         |
 | StakeLock.value                   |        TNat                              |Amount of tokens staked                                                     |
 | userStakeFlexPack                 |   TBig_map(TAddress, StakeFlex)          |Storage of all the flex stakings                                            |
-| StakeFlex                         |        TRecord                           |Structure of a staking flex                                                 |
+| StakeFlex                         |        TRecord                           |Structure of a flex staking                                                 |
 | StakeFlex.timestamp               |        TTimestamp                        |Timestamp of the begining of the staking                                    |
 | StakeLock.reward                  |        TNat                              |Rewards for the past period of the staking                                  |
 | StakeLock.value                   |        TNat                              |Amount of tokens staked                                                     |
@@ -93,7 +93,7 @@ This is the structure of the nested maps ```userStakeLockPack```
     def getStakingOptions(self, params):
         sp.set_type(params, sp.TUnit)
 ```
-Returns the whole map if staking options
+Returns the whole map of staking options
 
 #### getStakingOptionById: <a name="getStakingOptionById"></a>
 ```python
@@ -173,7 +173,7 @@ Returns all the locked stakings for a specified user
     def getLockStakeByPackAndId(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, address = sp.TAddress, id_ = sp.TNat).layout(("id_ as id", ("pack", "address"))))
 ```
-Returns the specified staking
+Returns a specified staking of a specified pack of a specified user
 
 #### getFlexStakeInformation: <a name="getFlexStakeInformation"></a>
 ```python
@@ -199,33 +199,38 @@ Returns the pending rewards for a user
         sp.set_type(params, sp.TRecord(reserve=sp.TAddress))
 ```
 Sets the reserve address
+
 #### updateAdmin: <a name="updateAdmin"></a>
 ```python
  @sp.entry_point
     def updateAdmin(self, params):
         sp.set_type(params, sp.TRecord(admin=sp.TAddress))
 ```
-Set the admin address of the contract
+Sets the admin address of the contract
+
 #### updateContract: <a name="updateContract"></a>
 ```python
 @sp.entry_point
     def updateContract(self, params):
         sp.set_type(params, sp.TRecord(contract = sp.TAddress))
 ```
-Set the address of the token contract
+Sets the address of the token contract
+
 #### updateVotingContract: <a name="updateVotingContract"></a>
 ```python
 @sp.entry_point
     def updateVotingContract(self, params):
         sp.set_type(params, sp.TRecord(contract = sp.TAddress))
 ```
-Set the adress of the voting contract
+Sets the adress of the voting contract
+
 #### is_voting_contract: <a name="is_voting_contract"></a>
 ```python
 @sp.sub_entry_point
     def is_voting_contract(self, contract):
 ```
-Verify if the address in param is the voting contract address
+Verifies if the address in param is the voting contract address
+
 #### createStakingOption: <a name="createStakingOption"></a>
 ```python
  @sp.entry_point
@@ -244,21 +249,23 @@ Function used to create a stacking pack (Period / APY). Only Admin
     def updateStakingOptionRate(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, rate = sp.TNat).layout(("_id as id", "rate")))
 ```
-Function used to set the new duration of the staking pack
+Sets the new duration of the staking pack
+
 #### updateStakingOptionMax: <a name="updateStakingOptionMax"></a>
 ```python
    @sp.entry_point
     def updateStakingOptionMax(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, _max = sp.TNat).layout(("_id as id", "_max as max")))
 ```
-Function used to set the new max amount per transaction
+Sets the new max amount per transaction
+
 #### updateStakingOptionMin: <a name="updateStakingOptionMin"></a>
 ```python
 @sp.entry_point
     def updateStakingOptionMin(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, _min = sp.TNat).layout(("_id as id", "_min as min")))
 ```
-Function used to set the new min per transaction 
+Sets the new min per transaction 
 
 ### Core functions <a name="CoreFunc"></a>
 #### stakeLock: <a name=""></a>
@@ -267,7 +274,7 @@ Function used to set the new min per transaction
     def stakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, amount = sp.TNat))
 ```
-Stakes the amount of tokens with using the parameters of the pack specified. Will initialize the map for the user if it's his first staking
+Stakes the amount of tokens using the parameters of the pack specified. Will initialize the map for the user if it's his first staking
 
 #### stakeFlex: <a name="stakeFlex"></a>
 ```python
