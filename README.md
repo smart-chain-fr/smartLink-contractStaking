@@ -93,7 +93,7 @@ This is the structure of the nested maps ```userStakeLockPack```
     def getStakingOptions(self, params):
         sp.set_type(params, sp.TUnit)
 ```
-Returns the whole map of staking options
+Returns the whole map of staking options.
 
 #### getStakingOptionById: <a name="getStakingOptionById"></a>
 ```python
@@ -101,7 +101,7 @@ Returns the whole map of staking options
     def getStakingOptionById(self, params):
         sp.set_type(params, sp.TNat)
 ```
-Returns the specified staking option
+Returns the specified staking option.
 
 #### getAdmin: <a name="getReserve"></a>
 ```python
@@ -109,7 +109,7 @@ Returns the specified staking option
     def getAdmin(self, params):
         sp.set_type(params, sp.TUnit)
 ```
-Returns the address of the admin
+Returns the address of the admin.
 
 #### getReserve: <a name="getReserve"></a>
 ```python
@@ -117,7 +117,7 @@ Returns the address of the admin
     def getReserve(self, params):
         sp.set_type(params, sp.TUnit)
 ```
-Returns the address of the reserve which will pay the staking rewards
+Returns the address of the reserve which will pay the staking rewards.
 
 #### getTokenContractAddress: <a name=""></a>
 ```python
@@ -125,7 +125,7 @@ Returns the address of the reserve which will pay the staking rewards
     def getTokenContractAddress(self, params):
         sp.set_type(params, sp.TUnit)
 ```
-Returns the address of the token contract
+Returns the address of the token contract.
 
 #### getVotingContract: <a name="getVotingContract"></a>
 ```python
@@ -133,7 +133,7 @@ Returns the address of the token contract
     def getVotingContract(self, params):
         sp.set_type(params, sp.TUnit)
 ```
-Returns the address of the voting contract
+Returns the address of the voting contract.
 
 #### getAllStakeFlex: <a name="getAllStakeFlex"></a>
 ```python
@@ -141,7 +141,7 @@ Returns the address of the voting contract
     def getAllStakeFlex(self, params):
         sp.set_type(params, sp.TUnit)
 ```
-Returns the whole map of the flex stakings
+Returns the whole map of the flex stakings.
 
 #### getAllStakeLock: <a name="getAllStakeLock"></a>
 ```python
@@ -149,7 +149,7 @@ Returns the whole map of the flex stakings
     def getAllStakeLock(self, params):
         sp.set_type(params, sp.TUnit)
 ```
-Returns the whole map of locked stakings
+Returns the whole map of locked stakings.
 
 #### getLockStakeByPack: <a name="getLockStakeByPack"></a>
 ```python
@@ -157,7 +157,7 @@ Returns the whole map of locked stakings
     def getLockStakeByPack(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, address = sp.TAddress))
 ```
-Returns all the stakings of a specified user for a specified pack
+Returns all the stakings of a specified user for a specified pack.
 
 #### getLockStakeInformation: <a name="getLockStakeInformation"></a>
 ```python
@@ -165,7 +165,7 @@ Returns all the stakings of a specified user for a specified pack
     def getLockStakeInformation(self, params):
         sp.set_type(params, sp.TAddress)
 ```
-Returns all the locked stakings for a specified user
+Returns all the locked stakings for a specified user.
 
 #### getLockStakeByPackAndId: <a name="getLockStakeByPackAndId"></a>
 ```python
@@ -173,7 +173,7 @@ Returns all the locked stakings for a specified user
     def getLockStakeByPackAndId(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, address = sp.TAddress, id_ = sp.TNat).layout(("id_ as id", ("pack", "address"))))
 ```
-Returns a specified staking of a specified pack of a specified user
+Returns a specified staking of a specified pack of a specified user.
 
 #### getFlexStakeInformation: <a name="getFlexStakeInformation"></a>
 ```python
@@ -181,7 +181,7 @@ Returns a specified staking of a specified pack of a specified user
     def getFlexStakeInformation(self, params):
         sp.set_type(params, sp.TAddress)
 ```
-Returns the flex staking of the specified user
+Returns the flex staking of the specified user.
 
 #### getCurrentPendingRewards: <a name="getCurrentPendingRewards"></a>
 ```python
@@ -189,7 +189,7 @@ Returns the flex staking of the specified user
     def getCurrentPendingRewards(self, params):
         sp.set_type(params, sp.TAddress)
 ```
-Returns the pending rewards for a user
+Returns the pending rewards for a user.
 
 ### Setters
 #### updateReserve: <a name="updateReserve"></a>
@@ -198,7 +198,7 @@ Returns the pending rewards for a user
     def updateReserve(self, params):
         sp.set_type(params, sp.TRecord(reserve=sp.TAddress))
 ```
-Sets the reserve address
+Sets the reserve address.
 
 #### updateAdmin: <a name="updateAdmin"></a>
 ```python
@@ -206,7 +206,7 @@ Sets the reserve address
     def updateAdmin(self, params):
         sp.set_type(params, sp.TRecord(admin=sp.TAddress))
 ```
-Sets the admin address of the contract
+Sets the admin address of the contract.
 
 #### updateContract: <a name="updateContract"></a>
 ```python
@@ -214,7 +214,7 @@ Sets the admin address of the contract
     def updateContract(self, params):
         sp.set_type(params, sp.TRecord(contract = sp.TAddress))
 ```
-Sets the address of the token contract
+Sets the address of the token contract.
 
 #### updateVotingContract: <a name="updateVotingContract"></a>
 ```python
@@ -222,14 +222,14 @@ Sets the address of the token contract
     def updateVotingContract(self, params):
         sp.set_type(params, sp.TRecord(contract = sp.TAddress))
 ```
-Sets the adress of the voting contract
+Sets the adress of the voting contract.
 
 #### is_voting_contract: <a name="is_voting_contract"></a>
 ```python
 @sp.sub_entry_point
     def is_voting_contract(self, contract):
 ```
-Verifies if the address in param is the voting contract address
+Verifies if the address in param is the voting contract address.
 
 #### createStakingOption: <a name="createStakingOption"></a>
 ```python
@@ -249,7 +249,7 @@ Function used to create a stacking pack (Period / APY). Only Admin
     def updateStakingOptionRate(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, rate = sp.TNat).layout(("_id as id", "rate")))
 ```
-Sets the new duration of the staking pack
+Sets the new duration of the staking pack.
 
 #### updateStakingOptionMax: <a name="updateStakingOptionMax"></a>
 ```python
@@ -257,7 +257,7 @@ Sets the new duration of the staking pack
     def updateStakingOptionMax(self, params):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, _max = sp.TNat).layout(("_id as id", "_max as max")))
 ```
-Sets the new max amount per transaction
+Sets the new max amount per transaction.
 
 #### updateStakingOptionMin: <a name="updateStakingOptionMin"></a>
 ```python
@@ -274,7 +274,7 @@ Sets the new min per transaction
     def stakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, amount = sp.TNat))
 ```
-Stakes the amount of tokens using the parameters of the pack specified. Will initialize the map for the user if it's his first staking
+Stakes the amount of tokens using the parameters of the pack specified. Will initialize the map for the user if it's his first staking.
 
 #### stakeFlex: <a name="stakeFlex"></a>
 ```python
@@ -282,7 +282,7 @@ Stakes the amount of tokens using the parameters of the pack specified. Will ini
     def stakeFlex(self, params):
         sp.set_type(params, sp.TRecord(amount = sp.TNat))
 ```
-Stakes the amount of tokens using the flex pack parameters. Will initialize the staking for the user if it's his first staking. Else it will only update the staking
+Stakes the amount of tokens using the flex pack parameters. Will initialize the staking for the user if it's his first staking. Else it will only update the staking.
 
 #### unstakeLock: <a name="unstakeLock"></a>
 ```python
@@ -298,7 +298,7 @@ Unstakes the specified stake. If the stake period isn't finished the user won't 
     def unlockWithReward(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, index = sp.TNat))
 ```
-Function called by ```unstakeLock``` if the staking period has finished. Will send the user his tokens back + the rewards
+Function called by ```unstakeLock``` if the staking period has finished. Will send the user his tokens back + the rewards.
 
 #### unlockWithoutReward: <a name="unlockWithoutReward"></a>
 ```python
@@ -321,14 +321,14 @@ Computes the reward for the last staking period, sets the timestamp to the actua
 @sp.entry_point
     def claimRewardFlex(self):
 ```
-Sends the rewards available to the user
+Sends the rewards available to the user.
 
 #### getReward: <a name="getReward"></a>
 ```python
  def getReward(self, params):
         sp.set_type(params, sp.TRecord(start=sp.TTimestamp, end = sp.TTimestamp, value= sp.TNat, rate=sp.TNat))
 ```
-Internal function that will compute the rewards for a period
+Internal function that will compute the rewards for a period.
 
 
 
