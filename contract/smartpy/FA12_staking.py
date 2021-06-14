@@ -216,22 +216,6 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
 
 class FA12Staking_methods(FA12Staking_core):
     
-    # The getReward function computes the reward for a period
-    # The function takes as parameters: 
-    # - the timestamp of the begining of the period
-    # - the timestamp of the end of the period
-    # - the amount that was staked
-    # - the staking rate
-    def getReward(self, start, end, value, rate):
-        k = sp.nat(10000000000)
-        period = end - start
-        timeRatio = k * sp.as_nat(period) / sp.as_nat(sp.timestamp(1).add_days(365) - sp.timestamp(1))
-        reward = timeRatio * rate
-        reward *= value
-        reward /= k*100
-        return reward
-    
-    
     # The updateStakingFlex function will add the amount to the stake and update the timestamp
     # The function takes as parameters:
     # - the address of the sender
