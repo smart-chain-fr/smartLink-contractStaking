@@ -96,7 +96,10 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
             userStakeFlexPack=UserStakeFlexPack,
             stakingOptions=Options,
             votingContract = sp.none,
-            stakingHistory = sp.map(tkey = sp.TTimestamp, tvalue = sp.TInt),
+            rewardsHistory = sp.big_map(tkey = sp.TAddress, tvalue = sp.TMap(sp.TTimestamp, sp.TNat)),
+            stakingHistory = sp.map(l={sp.timestamp(0):0},tkey = sp.TTimestamp, tvalue = sp.TInt),
+            numberOfStakers=sp.int(0),
+            redeemedRewards = sp.nat(0),
             **kargs
         )
 
@@ -216,6 +219,22 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
 
 class FA12Staking_methods(FA12Staking_core):
     
+    def addStaker(self, addr):
+        sp.if (~self.data.userStakeLockPack.contains(addr) & ~self.data.userStakeFlexPack.contains(addr)):
+            self.data.numberOfStakers = self.data.numberOfStakers + 1
+        
+    def delStaker(self, addr):
+        sp.if (~self.data.userStakeLockPack.contains(addr) & ~self.data.userStakeFlexPack.contains(addr)):
+            self.data.numberOfStakers = self.data.numberOfStakers - 1
+      
+    def updateRewardsHistory(self, addr, amount):
+        sp.if self.data.rewardsHistory.contains(addr):
+            self.data.rewardsHistory[addr][sp.now.add_seconds(0)] = amount
+        sp.else:
+            self.data.rewardsHistory[addr] = {sp.now.add_seconds(0):amount}
+            
+        self.data.redeemedRewards = self.data.redeemedRewards + amount
+            
     # The updateStakingFlex function will add the amount to the stake and update the timestamp
     # The function takes as parameters:
     # - the address of the sender
@@ -243,6 +262,7 @@ class FA12Staking_methods(FA12Staking_core):
         
         staking = sp.record(timestamp=sp.now.add_seconds(0), rate = self.data.stakingOptions[params.pack].stakingPercentage, value = params.amount)
         
+        self.addStaker(sp.sender)
         sp.if ~self.data.userStakeLockPack.contains(sp.sender):
             self.data.userStakeLockPack[sp.sender] = sp.map({params.pack :sp.map(l= {sp.nat(0):staking})})
         sp.else:
@@ -253,6 +273,7 @@ class FA12Staking_methods(FA12Staking_core):
                 self.data.userStakeLockPack[sp.sender][params.pack][index] = staking
         
         self.data.stakingHistory[sp.now.add_seconds(0)] = sp.to_int(params.amount)
+        
 
     # The stakeFlex function will create a staking flex with the parameters of the current staking flex parameters
     # The function takes as parameter:
@@ -267,7 +288,7 @@ class FA12Staking_methods(FA12Staking_core):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=sp.sender, to_=self.data.reserve, value=params.amount)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
-        
+        self.addStaker(sp.sender)
         sp.if ~self.data.userStakeFlexPack.contains(sp.sender):
             self.data.userStakeFlexPack[sp.sender] = sp.record(timestamp = sp.now.add_seconds(0), value = params.amount + sp.nat(0), reward = sp.nat(0))
         sp.else:
@@ -292,6 +313,8 @@ class FA12Staking_methods(FA12Staking_core):
             self.unlockWithReward(params)
         sp.else:
             self.unlockWithoutReward(params)
+            
+        self.delStaker(sp.sender)
         
             
     # The unlockWithReward function will send the tokens back to the user with the rewards
@@ -307,8 +330,8 @@ class FA12Staking_methods(FA12Staking_core):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
+        self.updateRewardsHistory(sp.sender, amount)
         self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(amount)
-        
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
         
     
@@ -348,7 +371,8 @@ class FA12Staking_methods(FA12Staking_core):
         self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
         
         self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(params.amount)
-    
+        self.delStaker(sp.sender)
+        
 
     # The function claimRewardFlex will send the rewards of a staking flex to the user
     # the function takes no parameter
@@ -362,7 +386,7 @@ class FA12Staking_methods(FA12Staking_core):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
-        
+        self.updateRewardsHistory(sp.sender, self.data.userStakeFlexPack[sp.sender].reward)
         self.data.userStakeFlexPack[sp.sender].reward = sp.as_nat(0) 
         self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
 
