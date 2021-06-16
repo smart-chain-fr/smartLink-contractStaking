@@ -50,44 +50,11 @@ Options = sp.map(
         )
     )
 
-TZIP16_Metadata_Base = {
-    "name"          : "SMAK Staking",
-    "description"   : "SMAK Staking smart-contract",
-    "authors"       : "Smartlink Dev Team <email@domain.com>",
-    "homepage"      : "https://smartpy.io",
-    "interfaces"    : "TZIP-016-2021-04-17"
-}
-
 def call(c, x):
     sp.transfer(x, sp.mutez(0), c)
 
-class FA12Staking_config:
-    def __init__(
-        self,
-        support_upgradable_metadata         = False,
-        use_token_metadata_offchain_view    = True,
-    ):
-        self.support_upgradable_metadata = support_upgradable_metadata
-        # Whether the contract metadata can be upgradable or not.
-        # When True a new entrypoint `change_metadata` will be added.
-
-        self.use_token_metadata_offchain_view = use_token_metadata_offchain_view
-        # Include offchain view for accessing the token metadata (requires TZIP-016 contract metadata)
-
-class FA12Staking_common:
-    def normalize_metadata(self, metadata):
-        """
-            Helper function to build metadata JSON (string => bytes).
-        """
-        for key in metadata:
-            metadata[key] = sp.utils.bytes_of_string(metadata[key])
-
-        return metadata
-        
-class FA12Staking_core(sp.Contract, FA12Staking_common):
-    def __init__(self, contract, admin, reserve, config, **kargs):
-        
-        self.config = config
+class FA12Staking_core(sp.Contract):
+    def __init__(self, contract, admin, reserve, metadata_url, **kargs):
         self.init(
             FA12TokenContract=contract,
             admin=admin,
@@ -99,9 +66,14 @@ class FA12Staking_core(sp.Contract, FA12Staking_common):
             stakingHistory = sp.map(l={sp.timestamp(0):0},tkey = sp.TTimestamp, tvalue = sp.TInt),
             numberOfStakers=sp.int(0),
             redeemedRewards = sp.nat(0),
+            metadata = sp.big_map({"":metadata_url}),
             **kargs
         )
 
+    @sp.entry_point
+    def updateMetadata(self,params):
+            sp.set_type(params, sp.TRecord(url = sp.TBytes))
+            self.data.metadata[""] = params.url
 
     # The function updateReserve will update the reserve address
     # The function takes as parameter:
@@ -403,14 +375,6 @@ class FA12Staking_methods(FA12Staking_core):
     def getStakingOptions(self, params):
         sp.set_type(params, sp.TUnit)
         sp.result(self.data.stakingOptions)
-    
-    @sp.utils.view(sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat))
-    def getStakingOptionById(self, params):
-        sp.set_type(params, sp.TNat)
-        sp.if self.data.stakingOptions.contains(params):
-            sp.result(self.data.stakingOptions[params])
-        sp.else:
-            sp.failwith("There is no staking options for this id")
             
     @sp.utils.view(sp.TAddress)
     def getAdmin(self, params):
@@ -431,27 +395,6 @@ class FA12Staking_methods(FA12Staking_core):
     def getVotingContract(self, params):
         sp.set_type(params, sp.TUnit)
         sp.result(self.data.votingContract.open_some(message = None))
-            
-    @sp.utils.view(sp.TBigMap(sp.TAddress, StakeFlex))
-    def getAllStakeFlex(self, params):
-        sp.set_type(params, sp.TUnit)
-        sp.result(self.data.userStakeFlexPack)
-        
-    @sp.utils.view(sp.TBigMap(sp.TAddress, sp.TMap(sp.TNat, sp.TMap(sp.TNat, StakeLock))))
-    def getAllStakeLock(self, params):
-        sp.set_type(params, sp.TUnit)
-        sp.result(self.data.userStakeLockPack)
-        
-    @sp.utils.view(sp.TMap(sp.TNat, StakeLock))
-    def getLockStakeByPack(self, params):
-        sp.set_type(params, sp.TRecord(pack = sp.TNat, address = sp.TAddress))
-        sp.if self.data.userStakeLockPack.contains(params.address):
-            sp.if self.data.userStakeLockPack[params.address].contains(params.pack):
-                sp.result(self.data.userStakeLockPack[params.address][params.pack])
-            sp.else:
-                sp.failwith("This locked staking pack does not exist")
-        sp.else:
-            sp.failwith("There is no locked staking for this address")
 
         
     @sp.utils.view(sp.TMap(sp.TNat, sp.TMap(sp.TNat, StakeLock)))
@@ -459,20 +402,6 @@ class FA12Staking_methods(FA12Staking_core):
         sp.set_type(params, sp.TAddress)
         sp.if self.data.userStakeLockPack.contains(params):
             sp.result(self.data.userStakeLockPack[params])
-        sp.else:
-            sp.failwith("There is no locked staking for this address")
-        
-    @sp.utils.view(StakeLock)
-    def getLockStakeByPackAndId(self, params):
-        sp.set_type(params, sp.TRecord(pack = sp.TNat, address = sp.TAddress, id_ = sp.TNat).layout(("id_ as id", ("pack", "address"))))
-        sp.if self.data.userStakeLockPack.contains(params.address):
-            sp.if self.data.userStakeLockPack[params.address].contains(params.pack):
-                sp.if self.data.userStakeLockPack[params.address][params.pack].contains(params.id_):
-                    sp.result(self.data.userStakeLockPack[params.address][params.pack][params.id_])
-                sp.else:
-                    sp.failwith("There is no locked staking with this id in this pack")
-            sp.else:
-                sp.failwith("This locked staking pack does not exist")
         sp.else:
             sp.failwith("There is no locked staking for this address")
             
@@ -500,44 +429,12 @@ class FA12Staking_methods(FA12Staking_core):
                         x.value = x.value + self.getReward(sp.record(start = item.timestamp, end = computed_end, value = item.value, rate = item.rate))
         sp.result(x.value)
 
-class FA12_Staking_contract_metadata(FA12Staking_core):
-    """
-        SPEC: https://gitlab.com/tzip/tzip/-/blob/master/proposals/tzip-16/tzip-16.md
-        This class offers utilities to define and set TZIP-016 contract metadata.
-    """
-    def generate_tzip16_metadata(self):
-        metadata = {
-            **TZIP16_Metadata_Base
-        }
 
-        self.init_metadata("metadata", metadata)
-
-    def set_contract_metadata(self, metadata):
-        """
-           Set contract metadata
-        """
-        self.update_initial_storage(
-            metadata = sp.big_map(self.normalize_metadata(metadata))
-        )
-
-        if self.config.support_upgradable_metadata:
-            def update_metadata(self, key, value):
-                """
-                    An entry-point to allow the contract metadata to be updated.
-                    Can be removed with `FA12_config(support_upgradable_metadata = False, ...)`
-                """
-                sp.verify_equal(self.data.admin, sp.sender, Error.NotAdmin)
-                self.data.metadata[key] = value
-            self.update_metadata = sp.entry_point(update_metadata)
             
-class FA12Staking(FA12Staking_core, FA12_Staking_contract_metadata, FA12Staking_methods):
-    def __init__(self, contract, admin, reserve, config, contract_metadata = None):
-        FA12Staking_core.__init__(self, contract, admin, reserve, config)
-        if contract_metadata is not None:
-            self.set_contract_metadata(contract_metadata)
-        # This is only an helper, it produces metadata in the output panel
-        # that users can copy and upload to IPFS.
-        self.generate_tzip16_metadata()
+class FA12Staking(FA12Staking_core, FA12Staking_methods):
+    def __init__(self, contract, admin, reserve, metadata_url):
+        FA12Staking_core.__init__(self, contract, admin, reserve,metadata_url)
+
             
 class Viewer(sp.Contract):
     def __init__(self, t):
@@ -567,7 +464,8 @@ def test():
 
     scenario.h1("Initialize the contract")
     contract = sp.address("KT1TezoooozzSmartPyzzSTATiCzzzwwBFA1")
-    c1 = FA12Staking(contract, admin.address, reserve.address, config = FA12Staking_config(support_upgradable_metadata = True), contract_metadata =TZIP16_Metadata_Base )
+    metadata_url = sp.utils.bytes_of_string("ipfs://Qmd24eKvMaYzBxbKEH6kr6nnnHMCCchntVprK3NJJfVvky")
+    c1 = FA12Staking(contract, admin.address, reserve.address, metadata_url)
     scenario += c1
 
     scenario.h1("Tests")
@@ -683,7 +581,7 @@ def test():
     scenario += c1.stakeFlex(amount = 10000).run(sender=alice, now = sp.timestamp(94608000))
     
     scenario.h2("Attempt to update metadata")
-    c1.update_metadata(key = "", value = sp.bytes("0x00")).run(sender = alice)
+    c1.updateMetadata(url = sp.bytes("0x00")).run(sender = alice)
     scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
     
     scenario.h1("Views")
@@ -699,12 +597,6 @@ def test():
     scenario += view_staking_options
     c1.getStakingOptions((sp.unit, view_staking_options.typed.target))
     scenario.verify_equal(view_staking_options.data.last, sp.some(sp.map({0:sp.record(minStake = 1000, maxStake = 1000000, stakingPercentage = 8, stakingPeriod = 10000), 1: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000), 2: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000)})))
-    
-    scenario.h3("Staking option by id")
-    view_staking_option_by_id = Viewer(sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat))
-    scenario += view_staking_option_by_id
-    c1.getStakingOptionById((sp.nat(0), view_staking_option_by_id.typed.target))
-    scenario.verify_equal(view_staking_option_by_id.data.last, sp.some(sp.record(minStake = 1000, maxStake = 1000000, stakingPeriod = 10000, stakingPercentage = 8)))
     
     scenario.h2("Tokens reserve")
     view_reserve = Viewer(sp.TAddress)
@@ -725,37 +617,14 @@ def test():
     c1.getFlexStakeInformation((alice.address, view_staking_flex.typed.target))
     scenario.verify_equal(view_staking_flex.data.last, sp.some(sp.record(timestamp = sp.timestamp(94608000), value = 10000, reward = 0)))
     
-    scenario.h3("List all flex stakes")
-    view_all_staking_flex = Viewer(sp.TBigMap(sp.TAddress, StakeFlex))
-    scenario += view_all_staking_flex
-    c1.getAllStakeFlex((sp.unit, view_all_staking_flex.typed.target))
-    scenario.verify_equal(view_all_staking_flex.data.last, sp.some(sp.big_map({alice.address : sp.record(reward = 0, timestamp = sp.timestamp(94608000), value = 10000)})))
-    
     scenario.h2("Lock staking")
     scenario.h3("List all locked stakes")
-    view_all_staking_lock = Viewer(sp.TBigMap(sp.TAddress, sp.TMap(sp.TNat, sp.TMap(sp.TNat, StakeLock))))
-    scenario += view_all_staking_lock
-    c1.getAllStakeLock((sp.unit, view_all_staking_lock.typed.target))
-    scenario.verify_equal(view_all_staking_lock.data.last, sp.some(sp.big_map({alice.address : sp.map({1:sp.map({0:sp.record(rate = 20, timestamp = sp.timestamp(31536001), value = 100000)})})})))
-    
+  
     scenario.h3("Locked staking information for a given address")
     view_staking_lock = Viewer(sp.TMap(sp.TNat, sp.TMap(sp.TNat, StakeLock)))
     scenario += view_staking_lock
     c1.getLockStakeInformation((alice.address, view_staking_lock.typed.target))
     scenario.verify_equal(view_staking_lock.data.last, sp.some(sp.map({1:sp.map({0:sp.record(rate = 20, timestamp = sp.timestamp(31536001), value = 100000)})})))
-    
-    scenario.h3("Locked staking information for a given address and for a given pack id")
-    view_staking_lock_pack = Viewer(sp.TMap(sp.TNat, StakeLock))
-    scenario += view_staking_lock_pack
-    c1.getLockStakeByPack((sp.record(address = alice.address, pack = 1), view_staking_lock_pack.typed.target))
-    scenario.verify_equal(view_staking_lock_pack.data.last, sp.some(sp.map({0:sp.record(rate = 20, timestamp = sp.timestamp(31536001), value = 100000)})))
-    
-    scenario.h3("Locked staking information for a given address, pack id and index")
-    view_staking_lock_pack_with_index = Viewer(StakeLock)
-    scenario += view_staking_lock_pack_with_index
-    c1.getLockStakeByPackAndId((sp.record(address = alice.address, pack = 1, id_ = 0), view_staking_lock_pack_with_index.typed.target))
-    scenario.verify_equal(view_staking_lock_pack_with_index.data.last, sp.some(sp.record(rate = 20, timestamp = sp.timestamp(31536001), value = 100000)))
-    
     
     scenario.h2("Get current pending total rewards")
     view_current_rewards = Viewer(sp.TNat)
