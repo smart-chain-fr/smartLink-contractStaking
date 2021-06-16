@@ -25,7 +25,7 @@ StakeFlex = sp.TRecord(
     reward=sp.TNat
 )
 
-UserStakeFlexPack = sp.big_map(tkey=sp.TAddress, tvalue = StakeFlex)
+UserStakeFlexPack = sp.map(tkey=sp.TAddress, tvalue = StakeFlex)
 
 UserStakeLockPack = sp.big_map(
     tkey=sp.TAddress,
@@ -327,15 +327,39 @@ class FA12Staking_methods(FA12Staking_core):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=params.amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract, entry_point="transfer").open_some(), paramCall)
-        
+        sp.trace(self.data.userStakeFlexPack[sp.sender].reward)
         self.data.userStakeFlexPack[sp.sender].reward += self.getReward(sp.record(start = self.data.userStakeFlexPack[sp.sender].timestamp, end = sp.now.add_seconds(0), value = self.data.userStakeFlexPack[sp.sender].value, rate = self.data.stakingOptions[0].stakingPercentage))
-        
+        sp.trace(self.data.userStakeFlexPack[sp.sender].reward)
         
         self.data.userStakeFlexPack[sp.sender].value = sp.as_nat(self.data.userStakeFlexPack[sp.sender].value - params.amount) 
         self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
         
         self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(params.amount)
         self.delStaker(sp.sender)
+        
+        
+        
+    @sp.entry_point
+    def updateStakingFlexRate(self, params):
+        sp.set_type(params, sp.TRecord(index = sp.TNat, end = sp.TNat, rate = sp.TNat))
+        keys = self.data.userStakeFlexPack.keys()
+        sp.verify(sp.sender == self.data.admin, Error.NotAdmin)
+        counter = sp.nat(0)
+        #sp.range(params.index, params.index+params.size):
+        sp.for i in keys:
+            sp.if counter >= params.index:
+                sp.if counter <= params.end:
+                    sp.trace(self.data.userStakeFlexPack[i])
+                    self.data.userStakeFlexPack[i].reward += self.getReward(sp.record(start = self.data.userStakeFlexPack[i].timestamp, end = sp.now.add_seconds(0), value = self.data.userStakeFlexPack[i].value, rate = self.data.stakingOptions[0].stakingPercentage))
+                   
+                    self.data.userStakeFlexPack[i].timestamp = sp.now
+                    sp.trace(self.data.userStakeFlexPack[i])
+
+
+            counter +=1
+            
+           
+        self.data.stakingOptions[0].stakingPercentage = params.rate
         
 
     # The function claimRewardFlex will send the rewards of a staking flex to the user
@@ -523,10 +547,14 @@ def test():
     scenario += c1.stakeFlex(amount = 10000).run(sender=alice)
     scenario.h3("Alice tries to stake more tokens and succeds")
     scenario += c1.stakeFlex(amount = 10100).run(sender = alice)
+    scenario.h3("The staking flex rate is changed")
+    scenario += c1.updateStakingFlexRate(sp.record(index = 0, end = 1, rate = 100)).run(sender = alice, now = sp.timestamp(31536000))
     scenario.h3("ALice tries to stake too few tokens and fails")
     scenario += c1.stakeFlex(amount = 1).run(sender = alice, valid = False)
     scenario.h3("Alice tries to stake too much tokens and fails")
     scenario += c1.stakeFlex(amount = 1000001).run(sender = alice, valid = False)
+    scenario.h3("Alice tries to stake more tokens and succeds")
+    scenario += c1.stakeFlex(amount = 10000).run(sender = alice)
     
     
     scenario.h2("Unstaking flex")
@@ -584,7 +612,7 @@ def test():
     c1.updateMetadata(url = sp.bytes("0x00")).run(sender = alice)
     scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
     
-    scenario.h1("Views")
+    """scenario.h1("Views")
     scenario.h2("Administrator")
     view_administrator = Viewer(sp.TAddress)
     scenario += view_administrator
@@ -630,4 +658,4 @@ def test():
     view_current_rewards = Viewer(sp.TNat)
     scenario += view_current_rewards
     c1.getCurrentPendingRewards((alice.address, view_current_rewards.typed.target)).run(now = sp.timestamp(94708000))
-    scenario.verify_equal(view_current_rewards.data.last, sp.some(sp.nat(20002)))
+    scenario.verify_equal(view_current_rewards.data.last, sp.some(sp.nat(20002)))"""
