@@ -290,11 +290,12 @@ class FA12Staking_methods(FA12Staking_core):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, index = sp.TNat))
         staking = self.data.userStakeLockPack[sp.sender][params.pack][params.index]
         amount = staking.value 
-        amount += self.getReward(sp.record(start = staking.timestamp, end = staking.timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod), value = staking.value, rate = staking.rate))
+        reward = self.getReward(sp.record(start = staking.timestamp, end = staking.timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod), value = staking.value, rate = staking.rate))
+        amount += reward
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
-        self.data.redeemedRewards = self.data.redeemedRewards + amount
+        self.data.redeemedRewards = self.data.redeemedRewards + reward
         self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(amount)
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
         
