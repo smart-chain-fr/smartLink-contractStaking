@@ -292,7 +292,9 @@ class FA12Staking_methods(FA12Staking_core):
             self.unlockWithReward(params)
         sp.else:
             self.unlockWithoutReward(params)
-            
+        sp.if sp.len(self.data.userStakeLockPack[sp.sender][params.pack]) == 0:
+            sp.if sp.len(self.data.userStakeLockPack[sp.sender]) == 0:
+                del self.data.userStakeLockPack[sp.sender]
         self.delStaker(sp.sender)
         
             
