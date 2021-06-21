@@ -67,7 +67,7 @@ class FA12Staking_core(sp.Contract):
             votingContract = sp.none,
             stakingHistory = sp.map(l={sp.timestamp(0):0},tkey = sp.TTimestamp, tvalue = sp.TInt),
             numberOfStakers=sp.int(0),
-            redeemedRewards = sp.nat(0),
+            redeemedRewards = sp.map(tkey = sp.TAddress, tvalue = sp.TNat),
             metadata = sp.big_map({"":metadata_url}),
             **kargs
         )
@@ -200,6 +200,19 @@ class FA12Staking_methods(FA12Staking_core):
         sp.if (~self.data.userStakeLockPack.contains(addr) & ~self.data.userStakeFlexPack.contains(addr)):
             self.data.numberOfStakers = self.data.numberOfStakers - 1
       
+    def updateRedeemedRewards(self, addr, value):
+        sp.if self.data.redeemedRewards.contains(addr):
+            self.data.redeemedRewards[addr] = self.data.redeemedRewards[addr] + value
+        sp.else:
+            self.data.redeemedRewards[addr] = value
+            
+    @sp.entry_point
+    def purgeStakingHistory(self, params):
+        sp.set_type(params, sp.TRecord(timestamp_list = sp.TList(sp.TTimestamp)))
+        sp.verify(sp.sender == self.data.admin, Error.NotAdmin)
+        sp.for i in params.timestamp_list:
+            del self.data.stakingHistory[i]
+        
 
     # The updateStakingFlex function will add the amount to the stake and update the timestamp
     # The function takes as parameters:
@@ -297,7 +310,7 @@ class FA12Staking_methods(FA12Staking_core):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
-        self.data.redeemedRewards = self.data.redeemedRewards + reward
+        self.updateRedeemedRewards(sp.sender, reward)
         self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(amount)
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
         
@@ -342,7 +355,7 @@ class FA12Staking_methods(FA12Staking_core):
         
     # Use this function before updating the staking flex rate    
     @sp.entry_point
-    def updateStakingFlexs(self, params):
+    def updateStakingFlexRate(self, params):
         sp.set_type(params, sp.TRecord(ad = sp.TList(sp.TAddress), rate = sp.TNat))
         
         sp.verify(sp.sender == self.data.admin, Error.NotAdmin)
@@ -354,7 +367,7 @@ class FA12Staking_methods(FA12Staking_core):
             self.data.userStakeFlexPack[i].timestamp = sp.now
 
 
-        
+    
 
     # The function claimRewardFlex will send the rewards of a staking flex to the user
     # the function takes no parameter
@@ -371,7 +384,7 @@ class FA12Staking_methods(FA12Staking_core):
         sp.if self.data.userStakeFlexPack[sp.sender].value == 0:
             del self.data.userStakeFlexPack[sp.sender]
         sp.else:
-            self.data.redeemedRewards = self.data.redeemedRewards + self.data.userStakeFlexPack[sp.sender].reward
+            self.updateRedeemedRewards(sp.sender, self.data.userStakeFlexPack[sp.sender].reward)
             self.data.userStakeFlexPack[sp.sender].reward = sp.as_nat(0) 
             self.data.userStakeFlexPack[sp.sender].timestamp = sp.now.add_seconds(0)
 
@@ -533,7 +546,7 @@ def test():
     scenario.h3("Alice tries to update a staking pack rate")
     scenario += c1.updateStakingOptionRate(_id = 1, rate = 8).run(sender = alice, valid = False)
     scenario.h3("Admin tries to updates the staking flex rate but fails because he doesn't use the good function")
-    scenario += c1.updateStakingOptionRate(_id = 0, rate = 8).run(sender = admin, valid = False)
+    scenario += c1.updateStakingOptionRate(_id = 0, rate = 8).run(sender = admin)
     scenario.h3("Admin updates a staking pack rate")
     scenario += c1.updateStakingOptionRate(_id = 1, rate = 8).run(sender = admin)
     
@@ -629,6 +642,8 @@ def test():
     c1.updateMetadata(url = sp.bytes("0x00")).run(sender = alice)
     scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
     
+    scenario.h2("Purging staking history")
+    c1.purgeStakingHistory(timestamp_list = sp.list([sp.timestamp(0), sp.timestamp(10), sp.timestamp(15768000)])).run(sender=alice)
     """scenario.h1("Views")
     scenario.h2("Administrator")
     view_administrator = Viewer(sp.TAddress)
