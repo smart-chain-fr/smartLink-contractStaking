@@ -11,10 +11,12 @@ class Error:
     NeverUsedPack                   = make("Never staked using this pack")
     NotStaking                      = make("This stake doesn't exist")
     BalanceTooLow                   = make("Not enough tokens to unstake")
+    StakingFlexRate                 = make("Can't update the staking flex rate with this function")
 
 
 StakeLock = sp.TRecord(
     timestamp=sp.TTimestamp,
+    period = sp.TInt,
     rate=sp.TNat,
     value=sp.TNat
 )
@@ -25,7 +27,7 @@ StakeFlex = sp.TRecord(
     reward=sp.TNat
 )
 
-UserStakeFlexPack = sp.map(tkey=sp.TAddress, tvalue = StakeFlex)
+UserStakeFlexPack = sp.big_map(tkey=sp.TAddress, tvalue = StakeFlex)
 
 UserStakeLockPack = sp.big_map(
     tkey=sp.TAddress,
@@ -204,7 +206,7 @@ class FA12Staking_methods(FA12Staking_core):
     # - the address of the sender
     # - the amount the user wants to add to the staking
     def updateStakingFlex(self, addr, amount):
-        self.data.userStakeFlexPack[addr].reward = self.getReward(sp.record(start = self.data.userStakeFlexPack[addr].timestamp, end = sp.now.add_seconds(0),  value = self.data.userStakeFlexPack[addr].value, rate = self.data.stakingOptions[0].stakingPercentage))
+        self.data.userStakeFlexPack[addr].reward += self.getReward(sp.record(start = self.data.userStakeFlexPack[addr].timestamp, end = sp.now.add_seconds(0),  value = self.data.userStakeFlexPack[addr].value, rate = self.data.stakingOptions[0].stakingPercentage))
         self.data.userStakeFlexPack[addr].value += amount
         self.data.userStakeFlexPack[addr].timestamp = sp.now.add_seconds(0)
 
@@ -224,7 +226,7 @@ class FA12Staking_methods(FA12Staking_core):
         paramCall = sp.record(from_=sp.sender, to_=self.data.reserve, value=params.amount)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
         
-        staking = sp.record(timestamp=sp.now.add_seconds(0), rate = self.data.stakingOptions[params.pack].stakingPercentage, value = params.amount)
+        staking = sp.record(timestamp=sp.now.add_seconds(0), rate = self.data.stakingOptions[params.pack].stakingPercentage, period = self.data.stakingOptions[params.pack].stakingPeriod,value = params.amount)
         
         self.addStaker(sp.sender)
         sp.if ~self.data.userStakeLockPack.contains(sp.sender):
@@ -235,7 +237,7 @@ class FA12Staking_methods(FA12Staking_core):
             sp.else:
                 index = sp.len(self.data.userStakeLockPack[sp.sender][params.pack])
                 self.data.userStakeLockPack[sp.sender][params.pack][index] = staking
-        
+        #clés
         self.data.stakingHistory[sp.now.add_seconds(0)] = sp.to_int(params.amount)
         
 
@@ -273,7 +275,7 @@ class FA12Staking_methods(FA12Staking_core):
         sp.verify(self.data.userStakeLockPack[sp.sender].contains(params.pack), Error.NeverUsedPack)
         sp.verify(self.data.userStakeLockPack[sp.sender][params.pack].contains(params.index), Error.NotStaking)
 
-        sp.if self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod) < sp.now:
+        sp.if self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_seconds(self.data.userStakeLockPack[sp.sender][params.pack][params.index].period) < sp.now:
             self.unlockWithReward(params)
         sp.else:
             self.unlockWithoutReward(params)
@@ -290,7 +292,7 @@ class FA12Staking_methods(FA12Staking_core):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, index = sp.TNat))
         staking = self.data.userStakeLockPack[sp.sender][params.pack][params.index]
         amount = staking.value 
-        reward = self.getReward(sp.record(start = staking.timestamp, end = staking.timestamp.add_seconds(self.data.stakingOptions[params.pack].stakingPeriod), value = staking.value, rate = staking.rate))
+        reward = self.getReward(sp.record(start = staking.timestamp, end = staking.timestamp.add_seconds(staking.period), value = staking.value, rate = staking.rate))
         amount += reward
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
@@ -338,9 +340,9 @@ class FA12Staking_methods(FA12Staking_core):
         self.delStaker(sp.sender)
         
         
-        
+    # Use this function before updating the staking flex rate    
     @sp.entry_point
-    def updateStakingFlexRate(self, params):
+    def updateStakingFlexs(self, params):
         sp.set_type(params, sp.TRecord(ad = sp.TList(sp.TAddress), rate = sp.TNat))
         
         sp.verify(sp.sender == self.data.admin, Error.NotAdmin)
@@ -351,8 +353,6 @@ class FA12Staking_methods(FA12Staking_core):
            
             self.data.userStakeFlexPack[i].timestamp = sp.now
 
-
-        self.data.stakingOptions[0].stakingPercentage = params.rate
 
         
 
@@ -530,9 +530,12 @@ def test():
     scenario += c1.updateStakingOptionDuration(_id = 0, duration = 10000).run(sender = admin)
 
     scenario.h2("Updating staking rate")
-    scenario += c1.updateStakingOptionRate(_id = 0, rate = 8).run(sender = alice, valid = False)
-    scenario.h3("Admin updates the state variable")
-    scenario += c1.updateStakingOptionRate(_id = 0, rate = 8).run(sender = admin)
+    scenario.h3("Alice tries to update a staking pack rate")
+    scenario += c1.updateStakingOptionRate(_id = 1, rate = 8).run(sender = alice, valid = False)
+    scenario.h3("Admin tries to updates the staking flex rate but fails because he doesn't use the good function")
+    scenario += c1.updateStakingOptionRate(_id = 0, rate = 8).run(sender = admin, valid = False)
+    scenario.h3("Admin updates a staking pack rate")
+    scenario += c1.updateStakingOptionRate(_id = 1, rate = 8).run(sender = admin)
     
     scenario.h2("Updating Admin")
     scenario.h3("Alice tries to update the state variable but does not succeed")
@@ -552,9 +555,9 @@ def test():
     scenario.h3("The staking flex rate is changed")
     scenario += c1.updateStakingFlexRate(sp.record(ad = sp.list([sp.address("tz1WxrQuZ4CK1MBUa2GqUWK1yJ4J6EtG1Gwi"), sp.address("tz1hdQscorfqMzFqYxnrApuS5i6QSTuoAp3w")]), rate = 100)).run(sender = alice, now = sp.timestamp(int(31536000/2)))
     scenario.h3("An address that never staked is passed as argument so it fails")
-    scenario += c1.updateStakingFlexRate(sp.record(ad = sp.list([sp.address("tz1WxrQuZ4CK1MBUa2GqUWK1yJ4J6EtG1Gww")), rate = 12)).run(sender = alice, valid = False, now = sp.timestamp(int(31536000/2)))
+    scenario += c1.updateStakingFlexRate(sp.record(ad = sp.list([sp.address("tz1WxrQuZ4CK1MBUa2GqUWK1yJ4J6EtG1Gww")]), rate = 12)).run(sender = alice, valid = False, now = sp.timestamp(int(31536000/2)))
     scenario.h3("Trying to update the staking flex rate but is not admin nor voting contract")
-    scenario += c1.updateStakingFlexRate(sp.record(ad = sp.list([sp.address("tz1WxrQuZ4CK1MBUa2GqUWK1yJ4J6EtG1Gwi")), rate = 12)).run(sender = robert, valid = False, now = sp.timestamp(int(31536000/2)))
+    scenario += c1.updateStakingFlexRate(sp.record(ad = sp.list([sp.address("tz1WxrQuZ4CK1MBUa2GqUWK1yJ4J6EtG1Gwi")]), rate = 12)).run(sender = bob, valid = False, now = sp.timestamp(int(31536000/2)))
     
     
     
