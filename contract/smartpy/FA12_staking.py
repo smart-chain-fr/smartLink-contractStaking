@@ -203,7 +203,7 @@ class FA12Staking_core(sp.Contract):
         sp.verify(self.data.stakingOptions.contains(params._id), Error.NotStakingOpt)
         self.data.stakingOptions[params._id].maxStake = params._max
     
-    # The function updateStakingOptionMax will update the min a user can stake in one transaction
+    # The function updateStakingOptionMin will update the min a user can stake in one transaction
     # The function takes as parameters:
     # - the staking pack id
     # - the staking pack new min amount per transaction 
@@ -235,7 +235,7 @@ class FA12Staking_methods(FA12Staking_core):
     # The stakeLock function will create a staking lock with the parameters of the specified pack
     # The function takes as parameters:
     # - the pack id
-    # - the staking index
+    # - the staking amount
     @sp.entry_point
     def stakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, amount = sp.TNat))
@@ -441,9 +441,9 @@ class FA12Staking_methods(FA12Staking_core):
         # Update user's staking flex map
         sp.if staking.value == 0:
             del self.data.userStakeFlexPack[id_][sp.sender]
+            del self.data.addressId[sp.sender]
             sp.if sp.len(self.data.userStakeFlexPack[id_])== 0:
                 del self.data.userStakeFlexPack[id_]
-                del self.data.addressId[sp.sender]
         sp.else:
             self.updateRedeemedRewards(sp.sender, staking.reward)
             staking.reward = sp.as_nat(0) 
@@ -506,7 +506,7 @@ class FA12Staking_methods(FA12Staking_core):
             
             staking.reward += self.getReward(sp.record(start = staking.timestamp, end = sp.now.add_seconds(0), value = staking.value, rate = staking.rate))
            
-            staking.timestamp = sp.now
+            staking.timestamp = sp.now.add_seconds(0)
             staking.rate = self.data.stakingOptions[0].stakingPercentage
         sp.trace(self.data.userStakeFlexPack)
         
@@ -550,9 +550,9 @@ class FA12Staking_methods(FA12Staking_core):
     @sp.utils.view(StakeFlex)
     def getFlexStakeInformation(self, params):
         sp.set_type(params, sp.TAddress)
-        id = self.data.addressId[params]
-        sp.if self.data.userStakeFlexPack[id].contains(params):
-            sp.result(self.data.userStakeFlexPack[id][params])
+        id_ = self.data.addressId[params]
+        sp.if self.data.userStakeFlexPack[id_].contains(params):
+            sp.result(self.data.userStakeFlexPack[id_][params])
         sp.else:
             sp.failwith("There is no flexible staking for this address")
             
@@ -560,9 +560,9 @@ class FA12Staking_methods(FA12Staking_core):
     def getCurrentPendingRewards(self, params):
         sp.set_type(params, sp.TAddress)
         x = sp.local("x", sp.nat(0))
-        id = self.data.addressId[params]
-        sp.if self.data.userStakeFlexPack[id].contains(params):
-            userFlexMap = self.data.userStakeFlexPack[id][params]
+        id_ = self.data.addressId[params]
+        sp.if self.data.userStakeFlexPack[id_].contains(params):
+            userFlexMap = self.data.userStakeFlexPack[id_][params]
             x.value = x.value + userFlexMap.reward + self.getReward(sp.record(start = userFlexMap.timestamp, end = sp.now.add_seconds(0), value = userFlexMap.value, rate = userFlexMap.rate))
         
         sp.if self.data.userStakeLockPack.contains(params):
