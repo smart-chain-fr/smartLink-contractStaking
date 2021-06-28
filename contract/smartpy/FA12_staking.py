@@ -24,7 +24,8 @@ StakeLock = sp.TRecord(
 StakeFlex = sp.TRecord(
     timestamp=sp.TTimestamp,
     value=sp.TNat,
-    reward=sp.TNat
+    reward=sp.TNat,
+    rate = sp.TNat
 )
 
 UserStakeFlexPack = sp.big_map(tkey=sp.TNat, tvalue =sp.TMap(sp.TAddress,  StakeFlex))
@@ -55,6 +56,22 @@ Options = sp.map(
 def call(c, x):
     sp.transfer(x, sp.mutez(0), c)
 
+# Storage:
+# - FA12TokenContract: contract address of the FA12 related token
+# - &dmin: contract admin address
+# - reserve: rewards reserve address
+# - userStakeLockPack: big map containing the staking lock information
+# - userStakeFlexPack: big map containing the staking flex information
+# - stakingOptions: map with the staking options information
+# - votingContract: address of a future voting contract that is allowed to make updates on this contract
+# - addressId: big map containing all the addresses of the flex stakers and their related id
+# - maxValuesNb: the highest id in the addressId map
+# - stakingHistory: map containing the staking history for a given time period
+# - numberOfStakers: the number of users staking SMAK
+# - redeemedRewards: big map containing the total of the redeemed rewards for each user
+# - totalRedeemedRewards: the total number of redeemed rewards since the beginning
+# - metadata: contract metadata
+
 class FA12Staking_core(sp.Contract):
     def __init__(self, contract, admin, reserve, metadata_url, **kargs):
         self.init(
@@ -75,6 +92,9 @@ class FA12Staking_core(sp.Contract):
             **kargs
         )
 
+    # The function updateMetadata will update the metadata ipfs url
+    # The function takes as parameter:
+    # - the new metadata ipfs url in bytes
     @sp.entry_point
     def updateMetadata(self,params):
             sp.set_type(params, sp.TRecord(url = sp.TBytes))
@@ -117,7 +137,9 @@ class FA12Staking_core(sp.Contract):
         sp.verify_equal(sp.sender, self.data.admin, Error.NotAdmin)
         self.data.votingContract = sp.some(params.contract)
     
-
+    # The function is_voting_contract checks if a given address matches the voting contract's one
+    # The function takes as parameter:
+    # - an address
     @sp.sub_entry_point
     def is_voting_contract(self, contract):
         sp.if self.data.votingContract.is_some():
@@ -195,10 +217,16 @@ class FA12Staking_core(sp.Contract):
 
 class FA12Staking_methods(FA12Staking_core):
     
+    # The function increments the number of stakers by 1 if there is a new users stakes SMAK on the contract
+    # The function takes as parameter:
+    # - user address
     def addStaker(self, addr):
         sp.if (~self.data.userStakeLockPack.contains(addr) & ~self.data.addressId.contains(addr)):
             self.data.numberOfStakers = self.data.numberOfStakers + 1
-        
+      
+    # The function decrements the number of stakers by 1 if there is a user that unstakes his last stake from the contract
+    # The function takes as parameter:
+    # - user address  
     def delStaker(self, addr):
         sp.if (~self.data.userStakeLockPack.contains(addr) & ~self.data.addressId.contains(addr)):
             self.data.numberOfStakers = self.data.numberOfStakers - 1
@@ -216,15 +244,21 @@ class FA12Staking_methods(FA12Staking_core):
         sp.verify(params.amount < self.data.stakingOptions[params.pack].maxStake, Error.AmountTooHigh)
         sp.verify(self.data.stakingOptions.contains(params.pack), Error.NotStakingOpt)
         
+        # Transfer the staking amount from the address to the contract
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=sp.sender, to_=self.data.reserve, value=params.amount)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
         
+        # Create the stake on the contract
         staking = sp.record(timestamp=sp.now.add_seconds(0), rate = self.data.stakingOptions[params.pack].stakingPercentage, period = self.data.stakingOptions[params.pack].stakingPeriod,value = params.amount)
         
-        self.addStaker(sp.sender)
+        self.addStaker(sp.sender) # Increment the number of stakers on the contract by 1 if this is the user's first stake
+        
+        # Check if it is the first stake for the user and creates their staking big map
         sp.if ~self.data.userStakeLockPack.contains(sp.sender):
             self.data.userStakeLockPack[sp.sender] = sp.map({params.pack :sp.map(l= {sp.nat(0):staking})})
+        
+        # If not, update the current user's map
         sp.else:
             sp.if ~self.data.userStakeLockPack[sp.sender].contains(params.pack):
                 self.data.userStakeLockPack[sp.sender][params.pack] = sp.map({sp.nat(0):staking})
@@ -232,7 +266,7 @@ class FA12Staking_methods(FA12Staking_core):
                 index = sp.len(self.data.userStakeLockPack[sp.sender][params.pack])
                 self.data.userStakeLockPack[sp.sender][params.pack][index] = staking
 
-        self.data.stakingHistory[sp.now.add_seconds(0)] = sp.to_int(params.amount)
+        self.data.stakingHistory[sp.now.add_seconds(0)] = sp.to_int(params.amount) # Update the staking history
       
       
     # The stakeFlex function will create a staking flex with the parameters of the current staking flex parameters
@@ -245,39 +279,45 @@ class FA12Staking_methods(FA12Staking_core):
         sp.verify(params.amount > self.data.stakingOptions[0].minStake, Error.AmountTooLow)
         sp.verify(params.amount < self.data.stakingOptions[0].maxStake, Error.AmountTooHigh)
         
+        # Transfer the staking amount from the address to the contract
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=sp.sender, to_=self.data.reserve, value=params.amount)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
         
-        self.addStaker(sp.sender)
-        id_ = sp.local("id_", sp.nat(0))
+        current_rate = self.data.stakingOptions[0].stakingPercentage 
         
+        self.addStaker(sp.sender) # Increment the number of stakers on the contract by 1 if this is the user's first stake
+        
+        # Update the addressId map with the user if they are not already registered 
+        id_ = sp.local("id_", sp.nat(0))
         sp.if ~self.data.addressId.contains(sp.sender):
             sp.while (self.data.userStakeFlexPack.contains(id_.value) & (sp.len(self.data.userStakeFlexPack[id_.value]) >= self.data.maxValuesNb)):
                 id_.value +=1
             self.data.addressId[sp.sender] = id_.value
         id_.value = self.data.addressId[sp.sender]
 
-        
+        # Check if it is the user's first stake, and if it is, creates the associate big map. If not, updates it.
         sp.if ~self.data.userStakeFlexPack.contains(id_.value):
-            self.data.userStakeFlexPack[id_.value] = {sp.sender : sp.record(timestamp = sp.now.add_seconds(0), value = params.amount + sp.nat(0), reward = sp.nat(0)) }
+            self.data.userStakeFlexPack[id_.value] = {sp.sender : sp.record(timestamp = sp.now.add_seconds(0), value = params.amount + sp.nat(0), reward = sp.nat(0), rate = current_rate) }
         sp.else :
             sp.if ~self.data.userStakeFlexPack[id_.value].contains(sp.sender):
-                self.data.userStakeFlexPack[id_.value][sp.sender] = sp.record(timestamp = sp.now.add_seconds(0), value = params.amount + sp.nat(0), reward = sp.nat(0))
+                self.data.userStakeFlexPack[id_.value][sp.sender] = sp.record(timestamp = sp.now.add_seconds(0), value = params.amount + sp.nat(0), reward = sp.nat(0), rate = current_rate)
             sp.else:
                     self.updateStakingFlex(id_.value, sp.sender, params.amount)
-        self.data.stakingHistory[sp.now.add_seconds(0)] = sp.to_int(params.amount)
-        #sp.trace(self.data.userStakeFlexPack)
-        
+                    
+        self.data.stakingHistory[sp.now.add_seconds(0)] = sp.to_int(params.amount) # Update the staking history
+
         
     # The updateStakingFlex function will add the amount to the stake and update the timestamp
     # The function takes as parameters:
     # - the address of the sender
     # - the amount the user wants to add to the staking
     def updateStakingFlex(self, id_, addr, amount):
-        self.data.userStakeFlexPack[id_][addr].reward += self.getReward(sp.record(start = self.data.userStakeFlexPack[id_][addr].timestamp, end = sp.now.add_seconds(0),  value = self.data.userStakeFlexPack[id_][addr].value, rate = self.data.stakingOptions[0].stakingPercentage))
-        self.data.userStakeFlexPack[id_][addr].value += amount
-        self.data.userStakeFlexPack[id_][addr].timestamp = sp.now.add_seconds(0)
+        staking = self.data.userStakeFlexPack[id_][addr]
+        staking.reward += self.getReward(sp.record(start = staking.timestamp, end = sp.now.add_seconds(0),  value = staking.value, rate = staking.rate))
+        staking.value += amount
+        staking.timestamp = sp.now.add_seconds(0)
+        staking.rate = self.data.stakingOptions[0].stakingPercentage
 
 
     # The unstakeLock function will unstake a locked staking
@@ -293,15 +333,21 @@ class FA12Staking_methods(FA12Staking_core):
         sp.verify(self.data.userStakeLockPack[sp.sender].contains(params.pack), Error.NeverUsedPack)
         sp.verify(self.data.userStakeLockPack[sp.sender][params.pack].contains(params.index), Error.NotStaking)
         
-        sp.if self.data.userStakeLockPack[sp.sender][params.pack][params.index].timestamp.add_seconds(self.data.userStakeLockPack[sp.sender][params.pack][params.index].period) < sp.now:
-            self.unlockWithReward(params)
+        staking = self.data.userStakeLockPack[sp.sender][params.pack][params.index]
+        
+        # Check if the staking lock period is fulfilled, if it is the case, the user receive their rewards while unstaking, if not, they only unstake their tokens.
+        sp.if staking.timestamp.add_seconds(staking.period) < sp.now:
+            self.unlockWithReward(sp.record(pack = params.pack, index = params.index, staking = staking))
         sp.else:
-            self.unlockWithoutReward(params)
+            self.unlockWithoutReward(sp.record(pack = params.pack, index = params.index, staking = staking))
+           
+        # Update the user's staking map 
         sp.if sp.len(self.data.userStakeLockPack[sp.sender][params.pack]) == 0:
             del self.data.userStakeLockPack[sp.sender][params.pack]
             sp.if sp.len(self.data.userStakeLockPack[sp.sender]) == 0:
                 del self.data.userStakeLockPack[sp.sender]
-        self.delStaker(sp.sender)
+                
+        self.delStaker(sp.sender) # If it was the last user stake on the contract, update the number of total stakers.
         
         
             
@@ -311,16 +357,20 @@ class FA12Staking_methods(FA12Staking_core):
     # - the index of the staking
     @sp.sub_entry_point
     def unlockWithReward(self, params):
-        sp.set_type(params, sp.TRecord(pack = sp.TNat, index = sp.TNat))
-        staking = self.data.userStakeLockPack[sp.sender][params.pack][params.index]
-        amount = staking.value 
-        reward = self.getReward(sp.record(start = staking.timestamp, end = staking.timestamp.add_seconds(staking.period), value = staking.value, rate = staking.rate))
+        sp.set_type(params, sp.TRecord(pack = sp.TNat, index = sp.TNat, staking = StakeLock))
+        
+        amount = params.staking.value 
+        reward = self.getReward(sp.record(start = params.staking.timestamp, end = params.staking.timestamp.add_seconds(params.staking.period), value = params.staking.value, rate = params.staking.rate))
         amount += reward
+        
+        # Send the token back + the reward amount from the reserve to the user
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
-        call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
-        self.updateRedeemedRewards(sp.sender, reward)
-        self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(amount)
+        call(sp.contract(paramTrans, self.data.FA12TokenContract, entry_point="transfer").open_some(), paramCall)
+        
+        self.updateRedeemedRewards(sp.sender, reward) # Update user's staking map
+        self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(amount) # update staking history
+        
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
         
     
@@ -328,14 +378,18 @@ class FA12Staking_methods(FA12Staking_core):
     # The function takes as parameters:
     # - the staking pack
     # - the index of the staking
+    # - the staking information
     @sp.sub_entry_point
     def unlockWithoutReward(self, params):
-        sp.set_type(params, sp.TRecord(index = sp.TNat, pack = sp.TNat))
-        amount = self.data.userStakeLockPack[sp.sender][params.pack][params.index].value
+        sp.set_type(params, sp.TRecord(pack = sp.TNat, index = sp.TNat, staking = StakeLock))
+        amount = params.staking.value
+        
+        # Send the tokens back from the reserve to the reserve to the user
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract,entry_point="transfer").open_some(), paramCall)
-        self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(amount)
+        
+        self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(amount) # Update staking history
         del self.data.userStakeLockPack[sp.sender][params.pack][params.index]
         
         
@@ -349,18 +403,21 @@ class FA12Staking_methods(FA12Staking_core):
         sp.verify(self.data.userStakeFlexPack[id_].contains(sp.sender), Error.NeverStaked)
         sp.verify(self.data.userStakeFlexPack[id_][sp.sender].value >= params.amount, Error.BalanceTooLow)
         
+        # Send the tokens back from the reserve to user's address
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=params.amount)
         call(sp.contract(paramTrans, self.data.FA12TokenContract, entry_point="transfer").open_some(), paramCall)
-        self.data.userStakeFlexPack[id_][sp.sender].reward += self.getReward(sp.record(start = self.data.userStakeFlexPack[id_][sp.sender].timestamp, end = sp.now.add_seconds(0), value = self.data.userStakeFlexPack[id_][sp.sender].value, rate = self.data.stakingOptions[0].stakingPercentage))
-
         
-        self.data.userStakeFlexPack[id_][sp.sender].value = sp.as_nat(self.data.userStakeFlexPack[id_][sp.sender].value - params.amount) 
-        self.data.userStakeFlexPack[id_][sp.sender].timestamp = sp.now.add_seconds(0)
+        # Update user's staking flex map
+        staking = self.data.userStakeFlexPack[id_][sp.sender]
+        staking.reward += self.getReward(sp.record(start = staking.timestamp, end = sp.now.add_seconds(0), value = staking.value, rate = staking.rate))
+        staking.value = sp.as_nat(staking.value - params.amount) 
+        staking.timestamp = sp.now.add_seconds(0)
+        staking.rate = self.data.stakingOptions[0].stakingPercentage
         
-        self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(params.amount)
+        self.data.stakingHistory[sp.now.add_seconds(0)] = -1 * sp.to_int(params.amount) # Update staking history
  
-        self.delStaker(sp.sender)
+        self.delStaker(sp.sender) # If it was the last user stake on the contract, update the number of total stakers.
 
   
 
@@ -372,23 +429,28 @@ class FA12Staking_methods(FA12Staking_core):
         
         sp.verify(self.data.userStakeFlexPack[id_].contains(sp.sender), Error.NeverStaked)
         
-        staking= self.data.userStakeFlexPack[id_][sp.sender] 
-        self.data.userStakeFlexPack[id_][sp.sender].reward += self.getReward(sp.record(start = staking.timestamp, end = sp.now.add_seconds(0), value = staking.value, rate = self.data.stakingOptions[0].stakingPercentage))
+        staking = self.data.userStakeFlexPack[id_][sp.sender] 
         
+        self.data.userStakeFlexPack[id_][sp.sender].reward += self.getReward(sp.record(start = staking.timestamp, end = sp.now.add_seconds(0), value = staking.value, rate = staking.rate))
+        
+        # Send the user's reward from the reserve to to the user's address
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[id_][sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
-        sp.if self.data.userStakeFlexPack[id_][sp.sender].value == 0:
+       
+        # Update user's staking flex map
+        sp.if staking.value == 0:
             del self.data.userStakeFlexPack[id_][sp.sender]
             sp.if sp.len(self.data.userStakeFlexPack[id_])== 0:
                 del self.data.userStakeFlexPack[id_]
                 del self.data.addressId[sp.sender]
         sp.else:
-            self.updateRedeemedRewards(sp.sender, self.data.userStakeFlexPack[id_][sp.sender].reward)
-            self.data.userStakeFlexPack[id_][sp.sender].reward = sp.as_nat(0) 
-            self.data.userStakeFlexPack[id_][sp.sender].timestamp = sp.now.add_seconds(0)
+            self.updateRedeemedRewards(sp.sender, staking.reward)
+            staking.reward = sp.as_nat(0) 
+            staking.timestamp = sp.now.add_seconds(0)
+            staking.rate = self.data.stakingOptions[0].stakingPercentage
         
-        self.delStaker(sp.sender)
+        self.delStaker(sp.sender) # If it was the last user stake on the contract, update the number of total stakers.
 
 
     # The function will compute the rewards for a specified value during a period at a certain rate
@@ -407,6 +469,10 @@ class FA12Staking_methods(FA12Staking_core):
         reward /= k*100
         return reward
         
+    # The function will update the redeemed rewards map
+    # The function takes as parameters:
+    # - address of the user that redeemed their rewards
+    # - amount of rewarsd
     def updateRedeemedRewards(self, addr, value):
         sp.if self.data.redeemedRewards.contains(addr):
             self.data.redeemedRewards[addr] = self.data.redeemedRewards[addr] + value
@@ -414,7 +480,10 @@ class FA12Staking_methods(FA12Staking_core):
             self.data.redeemedRewards[addr] = value
             
         self.data.totalRedeemedRewards+=value
-            
+    
+    # The function will purge the history for the given timestamps
+    # The function takes as parameters:
+    # - a list of timestamps to purge
     @sp.entry_point
     def purgeStakingHistory(self, params):
         sp.set_type(params, sp.TRecord(timestamp_list = sp.TList(sp.TTimestamp)))
@@ -422,23 +491,25 @@ class FA12Staking_methods(FA12Staking_core):
         sp.for i in params.timestamp_list:
             del self.data.stakingHistory[i]
         
-
-
         
-    # Use this function before updating the staking flex rate    
+    # The function will compute the rewards for a given list of users and update their flex rate accordingly to the new one
+    # The function takes as parameters:
+    # - the id of the batch of users to update
     @sp.entry_point
     def updateStakingFlexRate(self, params):
-        sp.set_type(params, sp.TNat)
+        sp.set_type(params, sp.TRecord(id_=sp.TNat))
         
         sp.verify(sp.sender == self.data.admin, Error.NotAdmin)
 
-        sp.for i in self.data.userStakeFlexPack[params].keys():
-            self.data.userStakeFlexPack[params][i].reward += self.getReward(sp.record(start = self.data.userStakeFlexPack[params][i].timestamp, end = sp.now.add_seconds(0), value = self.data.userStakeFlexPack[params][i].value, rate = self.data.stakingOptions[0].stakingPercentage))
+        sp.for i in self.data.userStakeFlexPack[params.id_].keys():
+            staking = self.data.userStakeFlexPack[params.id_][i]
+            
+            staking.reward += self.getReward(sp.record(start = staking.timestamp, end = sp.now.add_seconds(0), value = staking.value, rate = staking.rate))
            
-            self.data.userStakeFlexPack[params][i].timestamp = sp.now
+            staking.timestamp = sp.now
+            staking.rate = self.data.stakingOptions[0].stakingPercentage
         sp.trace(self.data.userStakeFlexPack)
         
-
     @sp.utils.view(sp.TMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
     def getStakingOptions(self, params):
         sp.set_type(params, sp.TUnit)
@@ -492,7 +563,7 @@ class FA12Staking_methods(FA12Staking_core):
         id = self.data.addressId[params]
         sp.if self.data.userStakeFlexPack[id].contains(params):
             userFlexMap = self.data.userStakeFlexPack[id][params]
-            x.value = x.value + userFlexMap.reward + self.getReward(sp.record(start = userFlexMap.timestamp, end = sp.now.add_seconds(0), value = userFlexMap.value, rate = self.data.stakingOptions[0].stakingPercentage))
+            x.value = x.value + userFlexMap.reward + self.getReward(sp.record(start = userFlexMap.timestamp, end = sp.now.add_seconds(0), value = userFlexMap.value, rate = userFlexMap.rate))
         
         sp.if self.data.userStakeLockPack.contains(params):
             sp.for pack_id in self.data.userStakeLockPack[params].keys():
@@ -534,7 +605,7 @@ def test():
 
     # Let's display the accounts:
     scenario.h1("Accounts")
-    scenario.show([admin, alice, bob])
+    scenario.show([admin, alice, bob, reserve, new_reserve, oscar])
 
     scenario.h1("Initialize the contract")
     contract = sp.address("KT1TezoooozzSmartPyzzSTATiCzzzwwBFA1")
@@ -587,7 +658,7 @@ def test():
     scenario += c1.updateStakingOptionRate(_id = 1, rate = 8).run(sender = alice, valid = False)
     scenario.h3("Admin updates a staking pack rate")
     scenario += c1.updateStakingOptionRate(_id = 1, rate = 8).run(sender = admin)
-    
+
     scenario.h2("Updating voting contract")
     scenario.h3("Alice tries to update the voting contract")
     scenario += c1.updateVotingContract(contract= voting_contract).run(sender = alice, valid = False)
@@ -608,11 +679,9 @@ def test():
     
     scenario.h2("Changing the staking flex's rate")
     scenario.h3("An address that never staked is passed as argument so it fails")
-    scenario += c1.updateStakingFlexRate(0).run(sender = alice, now = sp.timestamp(int(31536000/2)))
+    scenario += c1.updateStakingFlexRate(id_=0).run(sender = alice, now = sp.timestamp(int(31536000/2)))
     scenario.h3("Trying to update the staking flex rate but is not admin nor voting contract")
-    scenario += c1.updateStakingFlexRate(0).run(sender = bob, valid = False, now = sp.timestamp(int(31536000/2)))
-    
-    
+    scenario += c1.updateStakingFlexRate(id_=0).run(sender = bob, valid = False, now = sp.timestamp(int(31536000/2)))
     
     scenario.h3("Alice tries to stake too few tokens and fails")
     scenario += c1.stakeFlex(amount = 1).run(sender = alice, valid = False)
@@ -722,10 +791,10 @@ def test():
 
     scenario.h2("Flex staking")
     scenario.h3("Flex staking information for a given address")
-    view_staking_flex = Viewer(sp.TRecord(timestamp=sp.TTimestamp, value=sp.TNat, reward=sp.TNat))
+    view_staking_flex = Viewer(sp.TRecord(timestamp=sp.TTimestamp, value=sp.TNat, reward=sp.TNat, rate = sp.TNat))
     scenario += view_staking_flex
     c1.getFlexStakeInformation((alice.address, view_staking_flex.typed.target))
-    scenario.verify_equal(view_staking_flex.data.last, sp.some(sp.record(timestamp = sp.timestamp(94608000), value = 10000, reward = 0)))
+    scenario.verify_equal(view_staking_flex.data.last, sp.some(sp.record(timestamp = sp.timestamp(94608000), value = 10000, reward = 0, rate = 20)))
     
     
     scenario.h2("Lock staking")
