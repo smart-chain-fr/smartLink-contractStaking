@@ -58,7 +58,7 @@ def call(c, x):
 
 # Storage:
 # - FA12TokenContract: contract address of the FA12 related token
-# - &dmin: contract admin address
+# - admin: contract admin address
 # - reserve: rewards reserve address
 # - userStakeLockPack: big map containing the staking lock information
 # - userStakeFlexPack: big map containing the staking flex information
@@ -98,6 +98,7 @@ class FA12Staking_core(sp.Contract):
     @sp.entry_point
     def updateMetadata(self,params):
             sp.set_type(params, sp.TRecord(url = sp.TBytes))
+            sp.verify_equal(sp.sender, self.data.admin, Error.NotAdmin)
             self.data.metadata[""] = params.url
 
     # The function updateReserve will update the reserve address
@@ -222,14 +223,14 @@ class FA12Staking_methods(FA12Staking_core):
     # - user address
     def addStaker(self, addr):
         sp.if (~self.data.userStakeLockPack.contains(addr) & ~self.data.addressId.contains(addr)):
-            self.data.numberOfStakers = self.data.numberOfStakers + 1
+            self.data.numberOfStakers += 1
       
     # The function decrements the number of stakers by 1 if there is a user that unstakes his last stake from the contract
     # The function takes as parameter:
     # - user address  
     def delStaker(self, addr):
         sp.if (~self.data.userStakeLockPack.contains(addr) & ~self.data.addressId.contains(addr)):
-            self.data.numberOfStakers = self.data.numberOfStakers - 1
+            self.data.numberOfStakers -= 1
             
             
     # The stakeLock function will create a staking lock with the parameters of the specified pack
@@ -250,7 +251,7 @@ class FA12Staking_methods(FA12Staking_core):
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
         
         # Create the stake on the contract
-        staking = sp.record(timestamp=sp.now.add_seconds(0), rate = self.data.stakingOptions[params.pack].stakingPercentage, period = self.data.stakingOptions[params.pack].stakingPeriod,value = params.amount)
+        staking = sp.record(timestamp=sp.now.add_seconds(0), rate = self.data.stakingOptions[params.pack].stakingPercentage, period = self.data.stakingOptions[params.pack].stakingPeriod, value = params.amount)
         
         self.addStaker(sp.sender) # Increment the number of stakers on the contract by 1 if this is the user's first stake
         
@@ -472,14 +473,14 @@ class FA12Staking_methods(FA12Staking_core):
     # The function will update the redeemed rewards map
     # The function takes as parameters:
     # - address of the user that redeemed their rewards
-    # - amount of rewarsd
+    # - amount of rewards
     def updateRedeemedRewards(self, addr, value):
         sp.if self.data.redeemedRewards.contains(addr):
             self.data.redeemedRewards[addr] = self.data.redeemedRewards[addr] + value
         sp.else:
             self.data.redeemedRewards[addr] = value
             
-        self.data.totalRedeemedRewards+=value
+        self.data.totalRedeemedRewards += value
     
     # The function will purge the history for the given timestamps
     # The function takes as parameters:
@@ -503,12 +504,9 @@ class FA12Staking_methods(FA12Staking_core):
 
         sp.for i in self.data.userStakeFlexPack[params.id_].keys():
             staking = self.data.userStakeFlexPack[params.id_][i]
-            
             staking.reward += self.getReward(sp.record(start = staking.timestamp, end = sp.now.add_seconds(0), value = staking.value, rate = staking.rate))
-           
             staking.timestamp = sp.now.add_seconds(0)
             staking.rate = self.data.stakingOptions[0].stakingPercentage
-        sp.trace(self.data.userStakeFlexPack)
         
     @sp.utils.view(sp.TMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
     def getStakingOptions(self, params):
