@@ -84,7 +84,7 @@ class FA12Staking_core(sp.Contract):
             votingContract = sp.none,
             addressId = sp.big_map(tkey = sp.TAddress, tvalue = sp.TNat),
             maxValuesNb = sp.nat(1),
-            stakingHistory = sp.map(l={sp.timestamp(0):0},tkey = sp.TTimestamp, tvalue = sp.TInt),
+            stakingHistory = sp.big_map(l={sp.timestamp(0):0},tkey = sp.TTimestamp, tvalue = sp.TInt),
             numberOfStakers=sp.int(0),
             redeemedRewards = sp.big_map(tkey = sp.TAddress, tvalue = sp.TNat),
             totalRedeemedRewards = sp.nat(0),
@@ -484,17 +484,6 @@ class FA12Staking_methods(FA12Staking_core):
             
         self.data.totalRedeemedRewards += value
     
-    # The function will purge the history for the given timestamps
-    # The function takes as parameters:
-    # - a list of timestamps to purge
-    @sp.entry_point
-    def purgeStakingHistory(self, params):
-        sp.set_type(params, sp.TRecord(timestamp_list = sp.TList(sp.TTimestamp)))
-        sp.verify(sp.sender == self.data.admin, Error.NotAdmin)
-        sp.for i in params.timestamp_list:
-            del self.data.stakingHistory[i]
-        
-        
     # The function will compute the rewards for a given list of users and update their flex rate accordingly to the new one
     # The function takes as parameters:
     # - the id of the batch of users to update
@@ -759,9 +748,7 @@ def test():
     scenario.h2("Attempt to update metadata")
     c1.updateMetadata(url = sp.bytes("0x00")).run(sender = alice)
     scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
-    
-    scenario.h2("Purging staking history")
-    c1.purgeStakingHistory(timestamp_list = sp.list([sp.timestamp(0), sp.timestamp(10), sp.timestamp(15768000)])).run(sender=alice)
+
     scenario.h1("Views")
     scenario.h2("Administrator")
     view_administrator = Viewer(sp.TAddress)
