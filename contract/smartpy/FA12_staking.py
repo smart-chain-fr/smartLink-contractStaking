@@ -513,83 +513,13 @@ class FA12Staking_methods(FA12Staking_core):
             staking.timestamp = sp.now.add_seconds(0)
             staking.rate = self.data.stakingOptions[0].stakingPercentage
         
-    @sp.utils.view(sp.TMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
-    def getStakingOptions(self, params):
-        sp.set_type(params, sp.TUnit)
-        sp.result(self.data.stakingOptions)
-            
-    @sp.utils.view(sp.TAddress)
-    def getAdmin(self, params):
-        sp.set_type(params, sp.TUnit)
-        sp.result(self.data.admin)
-        
-    @sp.utils.view(sp.TAddress)
-    def getReserve(self, params):
-        sp.set_type(params, sp.TUnit)
-        sp.result(self.data.reserve)
-        
-    @sp.utils.view(sp.TAddress)
-    def getTokenContractAddress(self, params):
-        sp.set_type(params, sp.TUnit)
-        sp.result(self.data.FA12TokenContract)
-        
-    @sp.utils.view(sp.TAddress)
-    def getVotingContract(self, params):
-        sp.set_type(params, sp.TUnit)
-        sp.if self.data.votingContract.is_some():
-            sp.result(self.data.votingContract.open_some(message = None))
-        sp.else:
-            sp.failwith("There is no voting contract")
-
-        
-    @sp.utils.view(sp.TMap(sp.TNat, sp.TMap(sp.TNat, StakeLock)))
-    def getLockStakeInformation(self, params):
-        sp.set_type(params, sp.TAddress)
-        sp.if self.data.userStakeLockPack.contains(params):
-            sp.result(self.data.userStakeLockPack[params])
-        sp.else:
-            sp.failwith("There is no locked staking for this address")
-            
-    @sp.utils.view(StakeFlex)
-    def getFlexStakeInformation(self, params):
-        sp.set_type(params, sp.TAddress)
-        id_ = self.data.addressId[params]
-        sp.if self.data.userStakeFlexPack[id_].contains(params):
-            sp.result(self.data.userStakeFlexPack[id_][params])
-        sp.else:
-            sp.failwith("There is no flexible staking for this address")
-            
-    @sp.utils.view(sp.TNat)
-    def getCurrentPendingRewards(self, params):
-        sp.set_type(params, sp.TAddress)
-        x = sp.local("x", sp.nat(0))
-        id_ = self.data.addressId[params]
-        sp.if self.data.userStakeFlexPack[id_].contains(params):
-            userFlexMap = self.data.userStakeFlexPack[id_][params]
-            x.value = x.value + userFlexMap.reward + self.getReward(sp.record(start = userFlexMap.timestamp, end = sp.now.add_seconds(0), value = userFlexMap.value, rate = userFlexMap.rate))
-        
-        sp.if self.data.userStakeLockPack.contains(params):
-            sp.for pack_id in self.data.userStakeLockPack[params].keys():
-                sp.for item in self.data.userStakeLockPack[params].get(pack_id).values():
-                    computed_end = item.timestamp.add_seconds(self.data.stakingOptions[pack_id].stakingPeriod)
-                    sp.if computed_end < sp.now:
-                        x.value = x.value + self.getReward(sp.record(start = item.timestamp, end = computed_end, value = item.value, rate = item.rate))
-        sp.result(x.value)
-
-
-            
+              
 class FA12Staking(FA12Staking_core, FA12Staking_methods):
     def __init__(self, contract, admin, reserve, metadata_url):
         FA12Staking_core.__init__(self, contract, admin, reserve,metadata_url)
 
             
-class Viewer(sp.Contract):
-    def __init__(self, t):
-        self.init(last = sp.none)
-        self.init_type(sp.TRecord(last = sp.TOption(t)))
-    @sp.entry_point
-    def target(self, params):
-        self.data.last = sp.some(params)
+
 
 @sp.add_test(name="Minimal")
 def test():
@@ -766,54 +696,4 @@ def test():
     c1.updateMetadata(url = sp.bytes("0x00")).run(sender = alice)
     scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
 
-    scenario.h1("Views")
-    scenario.h2("Administrator")
-    view_administrator = Viewer(sp.TAddress)
-    scenario += view_administrator
-    c1.getAdmin((sp.unit, view_administrator.typed.target))
-    scenario.verify_equal(view_administrator.data.last, sp.some(alice.address))
-    
-    scenario.h2("Staking options")
-    scenario.h3("List all staking options")
-    view_staking_options = Viewer(sp.TMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
-    scenario += view_staking_options
-    c1.getStakingOptions((sp.unit, view_staking_options.typed.target))
-    scenario.verify_equal(view_staking_options.data.last, sp.some(sp.map({0:sp.record(minStake = 1000, maxStake = 1000000, stakingPercentage = 20, stakingPeriod = 0), 1: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 8, stakingPeriod = 10000), 2: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000)})))
-    
-    scenario.h2("Tokens reserve")
-    view_reserve = Viewer(sp.TAddress)
-    scenario += view_reserve
-    c1.getReserve((sp.unit, view_reserve.typed.target))
-    scenario.verify_equal(view_reserve.data.last, sp.some(new_reserve.address))
-    
-    scenario.h2("Token contract address")
-    view_token_contract = Viewer(sp.TAddress)
-    scenario += view_token_contract
-    c1.getTokenContractAddress((sp.unit, view_token_contract.typed.target))
-    scenario.verify_equal(view_token_contract.data.last, sp.some(sp.address("KT1Tezooo3zzSmartPyzzSTATiCzzzseJjWC")))
-    
 
-    scenario.h2("Flex staking")
-    scenario.h3("Flex staking information for a given address")
-    view_staking_flex = Viewer(sp.TRecord(timestamp=sp.TTimestamp, value=sp.TNat, reward=sp.TNat, rate = sp.TNat))
-    scenario += view_staking_flex
-    c1.getFlexStakeInformation((alice.address, view_staking_flex.typed.target))
-    scenario.verify_equal(view_staking_flex.data.last, sp.some(sp.record(timestamp = sp.timestamp(94608000), value = 10000, reward = 0, rate = 20)))
-    
-    
-    scenario.h2("Lock staking")
-    scenario.h3("List all locked stakes")
-    
-
-    scenario.h3("Locked staking information for a given address")
-    view_staking_lock = Viewer(sp.TMap(sp.TNat, sp.TMap(sp.TNat, StakeLock)))
-    scenario += view_staking_lock
-    c1.getLockStakeInformation((alice.address, view_staking_lock.typed.target))
-    scenario.verify_equal(view_staking_lock.data.last, sp.some(sp.map({1:sp.map({0:sp.record(rate = 8, period = 10000, timestamp = sp.timestamp(31536001), value = 100000)})})))
-    
-    
-    scenario.h2("Get current pending total rewards")
-    view_current_rewards = Viewer(sp.TNat)
-    scenario += view_current_rewards
-    c1.getCurrentPendingRewards((alice.address, view_current_rewards.typed.target)).run(now = sp.timestamp(94708000))
-    scenario.verify_equal(view_current_rewards.data.last, sp.some(sp.nat(8)))
