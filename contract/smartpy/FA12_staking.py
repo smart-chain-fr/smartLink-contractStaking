@@ -191,6 +191,7 @@ class FA12Staking_core(sp.Contract):
         sp.set_type(params, sp.TRecord(_id = sp.TNat, duration = sp.TInt).layout(("_id as id", "duration")))
         sp.verify(self.is_voting_contract(sp.sender) | (self.data.admin == sp.sender), Error.NotAdmin)
         sp.verify(self.data.stakingOptions.contains(params._id), Error.NotStakingOpt)
+        sp.verify(params._id != sp.nat(0))
         self.data.stakingOptions[params._id].stakingPeriod = params.duration
     
 
@@ -427,7 +428,9 @@ class FA12Staking_methods(FA12Staking_core):
     # the function takes no parameter
     @sp.entry_point
     def claimRewardFlex(self):
+        sp.verify(self.data.addressId.contains(sp.sender), Error.NeverStaked)
         id_ = self.data.addressId[sp.sender]
+        
         sp.verify(self.data.userStakeFlexPack[id_].contains(sp.sender), Error.NeverStaked)
         
         staking = self.data.userStakeFlexPack[id_][sp.sender] 
@@ -438,6 +441,7 @@ class FA12Staking_methods(FA12Staking_core):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[id_][sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
+       
         # Update user's staking flex map
         sp.if staking.value == 0:
             del self.data.userStakeFlexPack[id_][sp.sender]
@@ -648,9 +652,12 @@ def test():
     scenario += c1.updateStakingOptionMin(_id = 0, _min = 1000).run(sender = admin)
 
     scenario.h2("Updating staking duration")
-    scenario += c1.updateStakingOptionDuration(_id = 0, duration = 10000).run(sender = alice, valid = False)
+    scenario += c1.updateStakingOptionDuration(_id = 1, duration = 10000).run(sender = alice, valid = False)
     scenario.h3("Admin updates the state variable")
-    scenario += c1.updateStakingOptionDuration(_id = 0, duration = 10000).run(sender = admin)
+    scenario += c1.updateStakingOptionDuration(_id = 1, duration = 10000).run(sender = admin)
+    
+    scenario.h3("Admin tries to set a duration for the staking flex pack but fails")
+    scenario += c1.updateStakingOptionDuration(_id = 0, duration = 10000).run(sender = admin, valid = False)
 
     scenario.h2("Updating staking rate")
     scenario.h3("Alice tries to update a staking pack rate")
@@ -771,7 +778,7 @@ def test():
     view_staking_options = Viewer(sp.TMap(sp.TNat, sp.TRecord(minStake=sp.TNat, maxStake=sp.TNat, stakingPeriod=sp.TInt, stakingPercentage=sp.TNat)))
     scenario += view_staking_options
     c1.getStakingOptions((sp.unit, view_staking_options.typed.target))
-    scenario.verify_equal(view_staking_options.data.last, sp.some(sp.map({0:sp.record(minStake = 1000, maxStake = 1000000, stakingPercentage = 20, stakingPeriod = 10000), 1: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 8, stakingPeriod = 31536000), 2: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000)})))
+    scenario.verify_equal(view_staking_options.data.last, sp.some(sp.map({0:sp.record(minStake = 1000, maxStake = 1000000, stakingPercentage = 20, stakingPeriod = 0), 1: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 8, stakingPeriod = 10000), 2: sp.record(minStake = 10, maxStake = 1000000000000, stakingPercentage = 20, stakingPeriod = 31536000)})))
     
     scenario.h2("Tokens reserve")
     view_reserve = Viewer(sp.TAddress)
@@ -802,11 +809,11 @@ def test():
     view_staking_lock = Viewer(sp.TMap(sp.TNat, sp.TMap(sp.TNat, StakeLock)))
     scenario += view_staking_lock
     c1.getLockStakeInformation((alice.address, view_staking_lock.typed.target))
-    scenario.verify_equal(view_staking_lock.data.last, sp.some(sp.map({1:sp.map({0:sp.record(rate = 8, period = 31536000, timestamp = sp.timestamp(31536001), value = 100000)})})))
+    scenario.verify_equal(view_staking_lock.data.last, sp.some(sp.map({1:sp.map({0:sp.record(rate = 8, period = 10000, timestamp = sp.timestamp(31536001), value = 100000)})})))
     
     
     scenario.h2("Get current pending total rewards")
     view_current_rewards = Viewer(sp.TNat)
     scenario += view_current_rewards
     c1.getCurrentPendingRewards((alice.address, view_current_rewards.typed.target)).run(now = sp.timestamp(94708000))
-    scenario.verify_equal(view_current_rewards.data.last, sp.some(sp.nat(8006)))
+    scenario.verify_equal(view_current_rewards.data.last, sp.some(sp.nat(8)))
