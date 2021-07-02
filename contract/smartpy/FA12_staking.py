@@ -84,6 +84,7 @@ class FA12Staking_core(sp.Contract):
             votingContract = sp.none,
             addressId = sp.big_map(tkey = sp.TAddress, tvalue = sp.TNat),
             maxValuesNb = sp.nat(1),
+            stakeFlexLength = sp.nat(0),
             stakingHistory = sp.big_map(l={sp.timestamp(0):0},tkey = sp.TTimestamp, tvalue = sp.TInt),
             numberOfStakers=sp.int(0),
             redeemedRewards = sp.big_map(tkey = sp.TAddress, tvalue = sp.TNat),
@@ -292,8 +293,9 @@ class FA12Staking_methods(FA12Staking_core):
         # Update the addressId map with the user if they are not already registered 
         id_ = sp.local("id_", sp.nat(0))
         sp.if ~self.data.addressId.contains(sp.sender):
-            sp.while (self.data.userStakeFlexPack.contains(id_.value) & (sp.len(self.data.userStakeFlexPack[id_.value]) >= self.data.maxValuesNb)):
-                id_.value +=1
+            sp.if (self.data.userStakeFlexPack.contains(self.data.stakeFlexLength) & (sp.len(self.data.userStakeFlexPack[self.data.stakeFlexLength]) >= self.data.maxValuesNb)):
+                self.data.stakeFlexLength += 1
+            id_.value = self.data.stakeFlexLength
             self.data.addressId[sp.sender] = id_.value
         id_.value = self.data.addressId[sp.sender]
 
@@ -305,7 +307,6 @@ class FA12Staking_methods(FA12Staking_core):
                 self.data.userStakeFlexPack[id_.value][sp.sender] = sp.record(timestamp = sp.now.add_seconds(0), value = params.amount + sp.nat(0), reward = sp.nat(0), rate = current_rate)
             sp.else:
                     self.updateStakingFlex(id_.value, sp.sender, params.amount)
-                    
         self.data.stakingHistory[sp.now.add_seconds(0)] = sp.to_int(params.amount) # Update the staking history
 
         
@@ -427,7 +428,6 @@ class FA12Staking_methods(FA12Staking_core):
     @sp.entry_point
     def claimRewardFlex(self):
         id_ = self.data.addressId[sp.sender]
-        
         sp.verify(self.data.userStakeFlexPack[id_].contains(sp.sender), Error.NeverStaked)
         
         staking = self.data.userStakeFlexPack[id_][sp.sender] 
@@ -438,21 +438,31 @@ class FA12Staking_methods(FA12Staking_core):
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
         paramCall = sp.record(from_=self.data.reserve, to_=sp.sender, value=self.data.userStakeFlexPack[id_][sp.sender].reward)
         call(sp.contract(paramTrans ,self.data.FA12TokenContract ,entry_point="transfer").open_some(), paramCall)
-       
         # Update user's staking flex map
         sp.if staking.value == 0:
             del self.data.userStakeFlexPack[id_][sp.sender]
-            
-            sp.if sp.len(self.data.userStakeFlexPack[id_])== 0:
-                del self.data.userStakeFlexPack[id_]
+            sp.if self.data.stakeFlexLength !=  id_:
+                newAdd = sp.local("newAdd", sp.sender)
+                sp.for i in self.data.userStakeFlexPack[self.data.stakeFlexLength].keys():
+                    newAdd.value = i
+                self.data.userStakeFlexPack[id_][newAdd.value] = self.data.userStakeFlexPack[self.data.stakeFlexLength][newAdd.value]
+                self.data.addressId[newAdd.value] = id_
+                del self.data.userStakeFlexPack[self.data.stakeFlexLength][newAdd.value]
                 del self.data.addressId[sp.sender]
-                
+                sp.if sp.len(self.data.userStakeFlexPack[self.data.stakeFlexLength])== 0:
+                    del self.data.userStakeFlexPack[self.data.stakeFlexLength]
+                    self.data.stakeFlexLength = sp.as_nat(self.data.stakeFlexLength - 1)
+            sp.else:
+                sp.if sp.len(self.data.userStakeFlexPack[self.data.stakeFlexLength])== 0:
+                    del self.data.userStakeFlexPack[self.data.stakeFlexLength]
+                    del self.data.addressId[sp.sender]
+                sp.if self.data.stakeFlexLength > 0:
+                    self.data.stakeFlexLength = sp.as_nat(self.data.stakeFlexLength - 1)
         sp.else:
             self.updateRedeemedRewards(sp.sender, staking.reward)
             staking.reward = sp.as_nat(0) 
             staking.timestamp = sp.now.add_seconds(0)
             staking.rate = self.data.stakingOptions[0].stakingPercentage
-        
         self.delStaker(sp.sender) # If it was the last user stake on the contract, update the number of total stakers.
 
 
@@ -701,12 +711,12 @@ def test():
     scenario += c1.claimRewardFlex().run(sender = alice, now = sp.timestamp(2*31536000))
     scenario.h3("Admin claims her rewards for her past stakings and succeeds (watch console)")
     scenario += c1.claimRewardFlex().run(sender = admin, now = sp.timestamp(2*31536000))
+    scenario.h3("Oscar claims her rewards for her past stakings and succeeds (watch console)")
+    scenario += c1.claimRewardFlex().run(sender = oscar, now = sp.timestamp(2*31536000))
     scenario.h3("Alice tries to claim her rewards again but since she has no token staked she gets no rewards (watch console)")
     scenario += c1.claimRewardFlex().run(sender = alice, now = sp.timestamp(3*31536000), valid = False)
     scenario.h3("Bob tries to claim rewards but he never stake and he fails")
     scenario += c1.claimRewardFlex().run(sender = bob, valid = False)
-    scenario.h3("Oscar claims her rewards for her past stakings and succeeds (watch console)")
-    scenario += c1.claimRewardFlex().run(sender = oscar, now = sp.timestamp(2*31536000))
     
     
     scenario.h2("Staking lock")
