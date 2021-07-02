@@ -243,8 +243,8 @@ class FA12Staking_methods(FA12Staking_core):
     def stakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack = sp.TNat, amount = sp.TNat))
         
-        sp.verify(params.amount > self.data.stakingOptions[params.pack].minStake, Error.AmountTooLow)
-        sp.verify(params.amount < self.data.stakingOptions[params.pack].maxStake, Error.AmountTooHigh)
+        sp.verify(params.amount >= self.data.stakingOptions[params.pack].minStake, Error.AmountTooLow)
+        sp.verify(params.amount <= self.data.stakingOptions[params.pack].maxStake, Error.AmountTooHigh)
         sp.verify(self.data.stakingOptions.contains(params.pack), Error.NotStakingOpt)
         
         # Transfer the staking amount from the address to the contract
@@ -279,8 +279,8 @@ class FA12Staking_methods(FA12Staking_core):
     def stakeFlex(self, params):
         sp.set_type(params, sp.TRecord(amount = sp.TNat))
         
-        sp.verify(params.amount > self.data.stakingOptions[0].minStake, Error.AmountTooLow)
-        sp.verify(params.amount < self.data.stakingOptions[0].maxStake, Error.AmountTooHigh)
+        sp.verify(params.amount >= self.data.stakingOptions[0].minStake, Error.AmountTooLow)
+        sp.verify(params.amount <= self.data.stakingOptions[0].maxStake, Error.AmountTooHigh)
         
         # Transfer the staking amount from the address to the contract
         paramTrans = sp.TRecord(from_ = sp.TAddress, to_ = sp.TAddress, value = sp.TNat).layout(("from_ as from", ("to_ as to", "value")))
