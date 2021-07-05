@@ -12,6 +12,8 @@ class Error:
     NotStaking                      = make("This stake doesn't exist")
     BalanceTooLow                   = make("Not enough tokens to unstake")
     StakingFlexRate                 = make("Can't update the staking flex rate with this function")
+    NotOption                       = make("This option does not exist")
+    NotAllowedFlex                  = make("Deleting the flex option is now allowed")
 
 
 StakeLock = sp.TRecord(
@@ -217,6 +219,14 @@ class FA12Staking_core(sp.Contract):
         sp.verify(self.data.stakingOptions.contains(params._id), Error.NotStakingOpt)
         self.data.stakingOptions[params._id].minStake = params._min
   
+    @sp.entry_point
+    def deleteStakingOption(self, params):
+        sp.set_type(params, sp.TRecord(_id = sp.TNat))
+        sp.verify(self.is_voting_contract(sp.sender) | (self.data.admin == sp.sender), Error.NotAdmin)
+        sp.verify(params._id != 0, Error.NotAllowedFlex)
+        sp.verify(self.data.stakingOptions.contains(params._id), Error.NotOption)
+        del self.data.stakingOptions[params._id]
+        
 
 class FA12Staking_methods(FA12Staking_core):
     
@@ -331,7 +341,6 @@ class FA12Staking_methods(FA12Staking_core):
     def unstakeLock(self, params):
         sp.set_type(params, sp.TRecord(pack=sp.TNat, index=sp.TNat))
         
-        sp.verify(self.data.stakingOptions.contains(params.pack), Error.NotStakingOpt)
         sp.verify(self.data.userStakeLockPack.contains(sp.sender), Error.NeverStaked)
         sp.verify(self.data.userStakeLockPack[sp.sender].contains(params.pack), Error.NeverUsedPack)
         sp.verify(self.data.userStakeLockPack[sp.sender][params.pack].contains(params.index), Error.NotStaking)
@@ -670,6 +679,18 @@ def test():
     scenario.h3("Admin tries to stake using the locked pack 1 and succeds")
     scenario += c1.stakeLock(pack = 1, amount = 10000).run(sender = admin)
     
+    scenario.h2("Deleting a staking option")
+    scenario.h3("Bob tries to delete an option but is not admin")
+    c1.deleteStakingOption(_id=1).run(sender = bob, valid = False)
+    scenario.h3("Alice tries to delete the flex option")
+    c1.deleteStakingOption(_id=0).run(sender = alice, valid = False)
+    scenario.h3("Alice tries to delete a lock option and succeeds")
+    c1.deleteStakingOption(_id=1).run(sender = alice)
+    scenario.h3("Alice tries to delete a lock option that was already deleted")
+    c1.deleteStakingOption(_id=1).run(sender = alice, valid = False)
+    scenario.h3("Alice tries to delete a lock option that does not exist")
+    c1.deleteStakingOption(_id=3).run(sender = alice, valid = False)
+    
     
     scenario.h2("Unstaking lock")
     scenario.h3("Alice tries to unstake her tokens before the end of the locking period and does not get her rewards (watch console)")
@@ -686,14 +707,10 @@ def test():
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender = bob, valid = False)
     scenario.h3("Admin unstakes his tokens after the end of the lock pack")
     scenario += c1.unstakeLock(pack = 1, index = 0).run(sender = admin)
-    
-    scenario.h3("Alice stakes again a locked pack")
-    scenario += c1.stakeLock(pack = 1, amount = 100000).run(sender = alice)
-    scenario.h3("Alice stakes again in flex pack")
-    scenario += c1.stakeFlex(amount = 10000).run(sender=alice, now = sp.timestamp(94608000))
+
     
     scenario.h2("Attempt to update metadata")
     c1.updateMetadata(url = sp.bytes("0x00")).run(sender = alice)
     scenario.verify(c1.data.metadata[""] == sp.bytes("0x00"))
-
-
+    
+    
